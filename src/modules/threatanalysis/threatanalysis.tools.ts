@@ -1,235 +1,138 @@
 import { ToolDecorator as Tool, z, ExecutionContext, Injectable, Widget } from '@nitrostack/core';
+import { EmailAnalysisService } from './email-analysis.service';
+import type { EmailAnalysisInput } from './email-types';
 
 /**
  * ThreatAnalysis Tools
- * 
+ *
  * Email, URL, and CVE analysis tools for security threat detection
  */
 
-// Zod schemas for tool inputs and outputs
-const EmailAnalysisSchema = z.object({
-  content: z.string().describe('Email content to analyze for phishing'),
-});
-
-const URLScanSchema = z.object({
-  url: z.string().url().describe('URL to scan for threats'),
-});
-
-const CVELookupSchema = z.object({
-  cveId: z.string().describe('CVE ID to look up (e.g., CVE-2024-1234)'),
-});
-
-// Output schemas
-const EmailAnalysisOutput = z.object({
-  riskScore: z.number().min(0).max(100),
-  riskLevel: z.enum(['low', 'medium', 'high', 'critical']),
-  indicators: z.array(z.object({
-    type: z.string(),
-    description: z.string(),
-    severity: z.enum(['low', 'medium', 'high']),
-  })),
-  mitigation: z.array(z.string()),
-  summary: z.string(),
-  imageUrl: z.string().optional(),
-});
-
-const URLScanOutput = z.object({
-  url: z.string(),
-  status: z.enum(['safe', 'suspicious', 'malicious']),
-  threatExplanation: z.string(),
-  indicators: z.array(z.string()),
-  riskScore: z.number().min(0).max(100),
-  imageUrl: z.string().optional(),
-});
-
-const CVEOutput = z.object({
-  cveId: z.string(),
-  summary: z.string(),
-  cvssScore: z.number().min(0).max(10),
-  severity: z.enum(['low', 'medium', 'high', 'critical']),
-  affectedSoftware: z.array(z.string()),
-  mitigation: z.array(z.string()),
-  publishedDate: z.string(),
-  imageUrl: z.string().optional(),
-});
-
 @Injectable()
 export class ThreatAnalysisTools {
-  /**
-   * Analyze email content for phishing and security threats
-   */
+  constructor(private readonly emailAnalysisService: EmailAnalysisService) {}
+
   @Widget({ route: 'threat-dashboard' })
   @Tool({
     name: 'analyze_email',
     description: 'Analyze email content for phishing attempts, suspicious indicators, and generate a risk score with mitigation recommendations',
-    inputSchema: EmailAnalysisSchema,
+    inputSchema: z.object({
+      subject: z.string().optional(),
+      from: z.object({
+        name: z.string().optional(),
+        email: z.string().email(),
+        domain: z.string().optional(),
+      }),
+      replyTo: z.string().optional(),
+      bodyText: z.string(),
+      bodyHtml: z.string().optional(),
+      urls: z.array(z.string().url()).optional(),
+      attachments: z.array(z.object({
+        filename: z.string(),
+        mimeType: z.string().optional(),
+        size: z.number().optional(),
+      })).optional(),
+      auth: z.object({
+        spf: z.enum(['pass', 'fail', 'softfail', 'neutral', 'none']).optional(),
+        dkim: z.enum(['pass', 'fail', 'neutral', 'none']).optional(),
+        dmarc: z.enum(['pass', 'fail', 'bestguesspass', 'none']).optional(),
+      }).optional(),
+    }),
   })
-  async analyzeEmail(input: { content: string }, context: ExecutionContext) {
-    const { content } = input;
-    
-    // Simulate email analysis with heuristics
-    const indicators = [];
-    let riskScore = 0;
+  async analyzeEmail(input: EmailAnalysisInput, context: ExecutionContext) {
+    context.logger.info('Analyzing email for phishing indicators', {
+      from: input.from.email,
+      subject: input.subject,
+    });
 
-    // Check for urgency tactics
-    if (/urgent|immediate|act now|verify|confirm|click here|update|suspended|locked|expired/i.test(content)) {
-      indicators.push({
-        type: 'Urgency Tactics',
-        description: 'Email uses urgent language to pressure action',
-        severity: 'high',
-      });
-      riskScore += 25;
-    }
-
-    // Check for suspicious links
-    if (/paypa1|amaz0n|micr0soft|go0gle|verify-account|confirm-identity/i.test(content)) {
-      indicators.push({
-        type: 'Domain Spoofing',
-        description: 'Email contains domain names that mimic legitimate services',
-        severity: 'high',
-      });
-      riskScore += 30;
-    }
-
-    // Check for requests for sensitive info
-    if (/password|credit card|ssn|social security|bank account|pin|cvv/i.test(content)) {
-      indicators.push({
-        type: 'Credential Harvesting',
-        description: 'Email requests sensitive personal or financial information',
-        severity: 'high',
-      });
-      riskScore += 25;
-    }
-
-    // Check for suspicious attachments
-    if (/\.exe|\.zip|\.scr|\.bat|\.cmd|\.vbs|\.js/i.test(content)) {
-      indicators.push({
-        type: 'Malicious Attachment',
-        description: 'Email contains potentially dangerous file types',
-        severity: 'critical',
-      });
-      riskScore += 35;
-    }
-
-    // Check for poor grammar/spelling (common in phishing)
-    if (/\b(recieve|occured|seperate|definately|untill|wich|thier)\b/i.test(content)) {
-      indicators.push({
-        type: 'Poor Grammar',
-        description: 'Email contains spelling/grammar errors common in phishing',
-        severity: 'medium',
-      });
-      riskScore += 10;
-    }
-
-    // Ensure risk score doesn't exceed 100
-    riskScore = Math.min(riskScore, 100);
-
-    const riskLevel = riskScore >= 80 ? 'critical' : riskScore >= 60 ? 'high' : riskScore >= 40 ? 'medium' : 'low';
-
-    const mitigation = [
-      'Do not click links or download attachments from untrusted senders',
-      'Verify sender email address by hovering over the display name',
-      'Contact the organization directly using a known phone number or website',
-      'Report the email as phishing to your email provider',
-      'Enable multi-factor authentication on all accounts',
-    ];
-
-    return {
-      riskScore,
-      riskLevel,
-      indicators: indicators.length > 0 ? indicators : [
-        {
-          type: 'No Threats Detected',
-          description: 'Email appears to be legitimate',
-          severity: 'low',
-        },
-      ],
-      mitigation,
-      summary: `Email analysis complete. Risk level: ${riskLevel}. ${indicators.length} suspicious indicators detected.`,
-      imageUrl: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop',
-    };
+    return this.emailAnalysisService.analyze(input);
   }
 
-  /**
-   * Scan a URL for security threats
-   */
   @Widget({ route: 'threat-dashboard' })
   @Tool({
     name: 'scan_url',
     description: 'Analyze a URL to determine if it is safe, suspicious, or malicious, with threat explanation and risk indicators',
-    inputSchema: URLScanSchema,
+    inputSchema: z.object({
+      url: z.string().url(),
+    }),
   })
   async scanUrl(input: { url: string }, context: ExecutionContext) {
-    const { url } = input;
-
+    const url = input.url;
     let status: 'safe' | 'suspicious' | 'malicious' = 'safe';
     let riskScore = 0;
     const indicators: string[] = [];
 
-    // Check for domain impersonation
-    if (/paypa1|amaz0n|micr0soft|go0gle|apple-id|verify-account|confirm-identity/i.test(url)) {
+    if (/paypa1|amaz0n|micr0soft|go0gle|apple-id|verify-account|confirm-identity|xn--/i.test(url)) {
       status = 'malicious';
       riskScore = 95;
-      indicators.push('Domain impersonation detected');
+      indicators.push('Domain impersonation or punycode detected');
       indicators.push('Known phishing infrastructure');
     }
 
-    // Check for suspicious TLDs
-    if (/\.tk|\.ml|\.ga|\.cf|\.xyz|\.top|\.download|\.review/i.test(url)) {
+    if (/^http:\/\//i.test(url)) {
       if (status === 'safe') status = 'suspicious';
-      riskScore = Math.max(riskScore, 60);
-      indicators.push('Suspicious top-level domain');
-    }
-
-    // Check for IP address instead of domain
-    if (/^https?:\/\/\d+\.\d+\.\d+\.\d+/.test(url)) {
-      if (status === 'safe') status = 'suspicious';
-      riskScore = Math.max(riskScore, 70);
-      indicators.push('URL uses IP address instead of domain name');
-    }
-
-    // Check for missing HTTPS
-    if (/^http:\/\//.test(url)) {
-      if (status === 'safe') status = 'suspicious';
-      riskScore = Math.max(riskScore, 50);
+      riskScore += 10;
       indicators.push('No HTTPS encryption');
     }
 
-    // Check for suspicious parameters
-    if (/[?&](login|password|verify|confirm|update|redirect|return)=/i.test(url)) {
+    if (/^https?:\/\/\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/|$)/i.test(url)) {
       if (status === 'safe') status = 'suspicious';
-      riskScore = Math.max(riskScore, 65);
-      indicators.push('Suspicious URL parameters detected');
+      riskScore += 20;
+      indicators.push('URL uses IP address instead of domain');
     }
 
-    const threatExplanation = 
-      status === 'malicious' ? 'This URL is known to be used in phishing and malware campaigns. Do not visit.' :
-      status === 'suspicious' ? 'This URL has characteristics of a phishing or malware site. Exercise caution.' :
-      'This URL appears to be safe based on current threat intelligence.';
+    if (/\b(bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly)\b/i.test(url)) {
+      if (status === 'safe') status = 'suspicious';
+      riskScore += 15;
+      indicators.push('URL shortener detected');
+    }
+
+    if (/\.(xyz|top|tk|ml|ga|cf|click|download|review|work|loan|vip|shop)(\/|$)/i.test(url)) {
+      if (status === 'safe') status = 'suspicious';
+      riskScore += 15;
+      indicators.push('Suspicious top-level domain');
+    }
+
+    if (/\b(login|verify|confirm|update|secure|account|signin|password|unlock|reset)\b/i.test(url)) {
+      riskScore += 10;
+      indicators.push('Credential-related path keywords');
+    }
+
+    if ((url.match(/\./g) || []).length >= 4) {
+      riskScore += 8;
+      indicators.push('Deep subdomain chain detected');
+    }
+
+    const threatExplanation =
+      status === 'malicious'
+        ? 'This URL is known to be malicious or highly suspicious. Do not visit.'
+        : status === 'suspicious'
+          ? 'This URL has suspicious characteristics. Exercise caution.'
+          : 'This URL appears safe based on current checks.';
 
     return {
       url,
       status,
       threatExplanation,
       indicators: indicators.length > 0 ? indicators : ['No threats detected'],
-      riskScore,
-      imageUrl: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop',
+      riskScore: Math.min(riskScore, 100),
+      imageUrl: status === 'safe'
+        ? 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=400&h=300&fit=crop'
+        : 'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop',
     };
   }
 
-  /**
-   * Look up CVE vulnerability information
-   */
   @Widget({ route: 'threat-dashboard' })
   @Tool({
     name: 'lookup_cve',
     description: 'Look up CVE vulnerability information including summary, CVSS score, severity, affected software, and mitigation recommendations',
-    inputSchema: CVELookupSchema,
+    inputSchema: z.object({
+      cveId: z.string(),
+    }),
   })
   async lookupCve(input: { cveId: string }, context: ExecutionContext) {
-    const { cveId } = input;
+    const cveId = input.cveId;
 
-    // Mock CVE database - in production this would query NVD or similar
     const cveDatabase: Record<string, any> = {
       'CVE-2024-1234': {
         cveId: 'CVE-2024-1234',
@@ -261,7 +164,6 @@ export class ThreatAnalysisTools {
       },
     };
 
-    // Return mock data or generic response
     const cveData = cveDatabase[cveId] || {
       cveId,
       summary: `Vulnerability in system component. Requires investigation.`,
