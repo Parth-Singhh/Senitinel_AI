@@ -1,0 +1,95 @@
+{
+  "incidentTemplates": [
+    {
+      "id": "incident_001",
+      "reportId": "INC-20240115-001",
+      "title": "Multi-Vector Phishing and Malware Campaign",
+      "severity": "critical",
+      "timestamp": "2024-01-15T14:30:00Z",
+      "executive_summary": "A coordinated phishing campaign targeting financial services users has been detected. The campaign combines email spoofing, malicious URLs, and exploitation of known vulnerabilities.",
+      "threat_analysis": {
+        "email_threat": {
+          "status": "critical",
+          "risk_score": 95,
+          "key_indicators": [
+            "Domain Spoofing",
+            "Urgency Tactics",
+            "Credential Harvesting"
+          ]
+        },
+        "url_threat": {
+          "status": "malicious",
+          "risk_score": 95,
+          "explanation": "Known phishing infrastructure used in previous campaigns"
+        },
+        "vulnerability_threat": {
+          "cve_id": "CVE-2024-1234",
+          "cvss_score": 9.8,
+          "severity": "critical"
+        }
+      },
+      "recommended_actions": [
+        "Immediately isolate affected systems from the network",
+        "Block the malicious URL at the firewall and email gateway",
+        "Scan all systems for indicators of compromise",
+        "Review email logs for similar phishing attempts",
+        "Notify all users to be vigilant for similar threats",
+        "Apply security patches for identified vulnerabilities",
+        "Conduct forensic analysis on compromised systems",
+        "Update threat intelligence feeds"
+      ],
+      "timeline": [
+        {
+          "time": "2024-01-15T14:00:00Z",
+          "event": "Phishing email detected with critical risk level"
+        },
+        {
+          "time": "2024-01-15T14:05:00Z",
+          "event": "Malicious URL identified: http://paypa1-verify.com/login (malicious)"
+        },
+        {
+          "time": "2024-01-15T14:10:00Z",
+          "event": "Vulnerability CVE-2024-1234 (CVSS: 9.8) identified in affected systems"
+        },
+        {
+          "time": "2024-01-15T14:30:00Z",
+          "event": "Incident report generated and escalated to security team"
+        }
+      ],
+      "imageUrl": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop"
+    },
+    {
+      "id": "incident_002",
+      "reportId": "INC-20240220-001",
+      "title": "SQL Injection Attack on Database Systems",
+      "severity": "high",
+      "timestamp": "2024-02-20T09:15:00Z",
+      "executive_summary": "A SQL injection vulnerability has been exploited in production database systems. Immediate patching and monitoring is required.",
+      "threat_analysis": {
+        "vulnerability_threat": {
+          "cve_id": "CVE-2024-5678",
+          "cvss_score": 8.6,
+          "severity": "high"
+        }
+      },
+      "recommended_actions": [
+        "Apply database connector patch immediately",
+        "Review database access logs for suspicious queries",
+        "Implement input validation on all user inputs",
+        "Enable database query logging and monitoring",
+        "Conduct security audit of database configuration"
+      ],
+      "timeline": [
+        {
+          "time": "2024-02-20T08:00:00Z",
+          "event": "Vulnerability CVE-2024-5678 (CVSS: 8.6) identified in affected systems"
+        },
+        {
+          "time": "2024-02-20T09:15:00Z",
+          "event": "Incident report generated and escalated to security team"
+        }
+      ],
+      "imageUrl": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop"
+    }
+  ]
+}

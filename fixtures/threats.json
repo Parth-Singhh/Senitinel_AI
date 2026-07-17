@@ -1,0 +1,119 @@
+{
+  "phishingEmails": [
+    {
+      "id": "email_001",
+      "subject": "Urgent: Verify Your Account",
+      "sender": "noreply@paypa1-verify.com",
+      "content": "Dear Customer, Your account has been suspended. Click here to verify your identity immediately. This is urgent and requires immediate action.",
+      "riskScore": 95,
+      "riskLevel": "critical",
+      "indicators": [
+        {
+          "type": "Domain Spoofing",
+          "description": "Email domain mimics PayPal (paypa1 instead of paypal)",
+          "severity": "high"
+        },
+        {
+          "type": "Urgency Tactics",
+          "description": "Uses urgent language and threats of account suspension",
+          "severity": "high"
+        },
+        {
+          "type": "Credential Harvesting",
+          "description": "Requests identity verification which is a common phishing tactic",
+          "severity": "high"
+        }
+      ],
+      "imageUrl": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop"
+    },
+    {
+      "id": "email_002",
+      "subject": "Update Your Payment Method",
+      "sender": "billing@amaz0n-secure.com",
+      "content": "Your payment method has expired. Update it now to avoid service interruption. Click the link below.",
+      "riskScore": 85,
+      "riskLevel": "high",
+      "indicators": [
+        {
+          "type": "Domain Spoofing",
+          "description": "Domain mimics Amazon (amaz0n with zero instead of o)",
+          "severity": "high"
+        },
+        {
+          "type": "Urgency Tactics",
+          "description": "Threatens service interruption to pressure action",
+          "severity": "medium"
+        }
+      ],
+      "imageUrl": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop"
+    }
+  ],
+  "maliciousUrls": [
+    {
+      "id": "url_001",
+      "url": "http://paypa1-verify.com/login",
+      "status": "malicious",
+      "riskScore": 95,
+      "threatExplanation": "This URL is known to be used in phishing campaigns targeting PayPal users. Domain impersonation detected.",
+      "indicators": [
+        "Domain impersonation (paypa1 vs paypal)",
+        "Known phishing infrastructure",
+        "No HTTPS encryption",
+        "Suspicious URL parameters"
+      ],
+      "imageUrl": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop"
+    },
+    {
+      "id": "url_002",
+      "url": "https://192.168.1.100/admin/login",
+      "status": "suspicious",
+      "riskScore": 70,
+      "threatExplanation": "URL uses IP address instead of domain name, which is a common phishing tactic.",
+      "indicators": [
+        "URL uses IP address instead of domain",
+        "Suspicious admin path",
+        "Potential credential harvesting"
+      ],
+      "imageUrl": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop"
+    }
+  ],
+  "cveRecords": [
+    {
+      "id": "cve_001",
+      "cveId": "CVE-2024-1234",
+      "summary": "Remote Code Execution vulnerability in popular web framework",
+      "cvssScore": 9.8,
+      "severity": "critical",
+      "affectedSoftware": [
+        "Framework v1.0-v2.5",
+        "Framework v3.0-v3.2"
+      ],
+      "mitigation": [
+        "Update to Framework v2.6 or v3.3 or later",
+        "Apply security patch immediately",
+        "Monitor systems for exploitation attempts",
+        "Implement network segmentation"
+      ],
+      "publishedDate": "2024-01-15",
+      "imageUrl": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop"
+    },
+    {
+      "id": "cve_002",
+      "cveId": "CVE-2024-5678",
+      "summary": "SQL Injection vulnerability in database connector",
+      "cvssScore": 8.6,
+      "severity": "high",
+      "affectedSoftware": [
+        "Database Connector v1.0-v1.5"
+      ],
+      "mitigation": [
+        "Update to Database Connector v1.6 or later",
+        "Use parameterized queries",
+        "Implement input validation",
+        "Apply principle of least privilege to database accounts"
+      ],
+      "publishedDate": "2024-02-20",
+      "imageUrl": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+Build an MCP application called Sentinel AI.
+
+Sentinel AI is an Enterprise Security Operations Copilot that helps security analysts detect and respond to cyber threats using AI.
+
+The application should have a modern dark-themed dashboard with four main tools:
+
+1. Email Analyzer
+- Accept pasted email content or uploaded .eml files
+- Detect phishing attempts
+- Generate a risk score
+- Explain suspicious indicators
+- Recommend mitigation
+
+2. URL Scanner
+- Accept a URL
+- Analyze whether it is safe, suspicious, or malicious
+- Explain why
+
+3. CVE Intelligence
+- Accept a CVE ID
+- Return vulnerability summary
+- CVSS score
+- Severity
+- Mitigation recommendations
+
+4. Incident Report Generator
+- Combine analysis from previous tools
+- Generate an executive security incident report
+
+Use a React frontend with modern cards and a dashboard layout.
+
+Create MCP tools for:
+- analyze_email
+- scan_url
+- lookup_cve
+- generate_report
+
+Prepare the project for NitroCloud deployment.
