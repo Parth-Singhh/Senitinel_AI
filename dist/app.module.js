@@ -4,43 +4,13 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-import { McpApp, Module, ConfigModule } from '@nitrostack/core';
-import { CalculatorModule } from './modules/calculator/calculator.module.js';
-import { ThreatAnalysisModule } from './modules/threatanalysis/threatanalysis.module.js';
-import { IncidentOpsModule } from './modules/incidentops/incidentops.module.js';
-import { SystemHealthCheck } from './health/system.health.js';
-/**
- * Root Application Module
- *
- * This is the main module that bootstraps the MCP server.
- * It registers all feature modules and health checks.
- */
+import { Module } from '@nitrostack/core';
 let AppModule = class AppModule {
 };
 AppModule = __decorate([
-    McpApp({
-        module: AppModule,
-        server: {
-            name: 'sentinel-ai',
-            version: '1.0.0'
-        },
-        logging: {
-            level: 'info'
-        }
-    }),
     Module({
         name: 'app',
-        description: 'Root application module',
-        imports: [
-            ConfigModule.forRoot(),
-            CalculatorModule,
-            ThreatAnalysisModule,
-            IncidentOpsModule
-        ],
-        providers: [
-            // Health Checks
-            SystemHealthCheck,
-        ]
+        imports: [],
     })
 ], AppModule);
 export { AppModule };

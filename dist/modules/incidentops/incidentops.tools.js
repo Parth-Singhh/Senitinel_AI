@@ -16,7 +16,25 @@ import { ToolDecorator as Tool, z, Injectable, Widget } from '@nitrostack/core';
 const GenerateReportSchema = z.object({
     emailAnalysis: z.object({
         riskScore: z.number(),
+        confidence: z.number().optional(),
         riskLevel: z.string(),
+        recommendedAction: z.string().optional(),
+        evidence: z.array(z.object({
+            category: z.string(),
+            signal: z.string(),
+            severity: z.string(),
+            weight: z.number().optional(),
+            details: z.string().optional(),
+        })).optional(),
+        signalBreakdown: z.object({
+            sender: z.number().optional(),
+            auth: z.number().optional(),
+            body: z.number().optional(),
+            urls: z.number().optional(),
+            attachments: z.number().optional(),
+            brand: z.number().optional(),
+            grammar: z.number().optional(),
+        }).optional(),
         indicators: z.array(z.object({
             type: z.string(),
             description: z.string(),
@@ -48,7 +66,10 @@ const ReportOutput = z.object({
         email_threat: z.object({
             status: z.string(),
             risk_score: z.number(),
+            confidence: z.number().optional(),
+            recommended_action: z.string().optional(),
             key_indicators: z.array(z.string()),
+            signal_breakdown: z.record(z.number()).optional(),
         }).optional(),
         url_threat: z.object({
             status: z.string(),
@@ -69,29 +90,27 @@ const ReportOutput = z.object({
     imageUrl: z.string().optional(),
 });
 let IncidentOpsTools = class IncidentOpsTools {
-    /**
-     * Generate an executive security incident report combining multiple threat analyses
-     */
     async generateReport(input, context) {
         const { emailAnalysis, urlScan, cveData, incidentTitle } = input;
-        // Determine overall severity
         let overallSeverity = 'low';
-        if (emailAnalysis?.riskLevel === 'critical' || urlScan?.status === 'malicious' || cveData?.severity === 'critical') {
+        if (emailAnalysis?.riskLevel === 'critical' || emailAnalysis?.recommendedAction === 'block' || urlScan?.status === 'malicious' || cveData?.severity === 'critical') {
             overallSeverity = 'critical';
         }
-        else if (emailAnalysis?.riskLevel === 'high' || urlScan?.status === 'suspicious' || cveData?.severity === 'high') {
+        else if (emailAnalysis?.riskLevel === 'high' || emailAnalysis?.recommendedAction === 'quarantine' || urlScan?.status === 'suspicious' || cveData?.severity === 'high') {
             overallSeverity = 'high';
         }
         else if (emailAnalysis?.riskLevel === 'medium' || cveData?.severity === 'medium') {
             overallSeverity = 'medium';
         }
-        // Build threat analysis section
         const threatAnalysis = {};
         if (emailAnalysis) {
             threatAnalysis.email_threat = {
                 status: emailAnalysis.riskLevel,
                 risk_score: emailAnalysis.riskScore,
-                key_indicators: emailAnalysis.indicators.map((ind) => ind.type),
+                confidence: emailAnalysis.confidence,
+                recommended_action: emailAnalysis.recommendedAction,
+                key_indicators: (emailAnalysis.evidence || []).map((item) => item.signal || item.type).filter(Boolean),
+                signal_breakdown: emailAnalysis.signalBreakdown,
             };
         }
         if (urlScan) {
@@ -108,27 +127,26 @@ let IncidentOpsTools = class IncidentOpsTools {
                 severity: cveData.severity,
             };
         }
-        // Build timeline
         const timeline = [];
         let timeOffset = 0;
         if (emailAnalysis) {
             timeline.push({
                 time: new Date(Date.now() - timeOffset * 60000).toISOString(),
-                event: `Phishing email detected with ${emailAnalysis.riskLevel} risk level`,
+                event: `Email analysis completed: ${emailAnalysis.riskLevel} risk, ${emailAnalysis.recommendedAction || 'no action'} recommended`,
             });
             timeOffset += 5;
         }
         if (urlScan) {
             timeline.push({
                 time: new Date(Date.now() - timeOffset * 60000).toISOString(),
-                event: `Malicious URL identified: ${urlScan.url} (${urlScan.status})`,
+                event: `URL scanned: ${urlScan.url} (${urlScan.status})`,
             });
             timeOffset += 5;
         }
         if (cveData) {
             timeline.push({
                 time: new Date(Date.now() - timeOffset * 60000).toISOString(),
-                event: `Vulnerability ${cveData.cveId} (CVSS: ${cveData.cvssScore}) identified in affected systems`,
+                event: `Vulnerability ${cveData.cveId} (CVSS: ${cveData.cvssScore}) identified`,
             });
             timeOffset += 5;
         }
@@ -136,7 +154,6 @@ let IncidentOpsTools = class IncidentOpsTools {
             time: new Date().toISOString(),
             event: 'Incident report generated and escalated to security team',
         });
-        // Build recommended actions
         const recommendedActions = [
             'Immediately isolate affected systems from the network',
             'Block the malicious URL at the firewall and email gateway',
@@ -147,11 +164,26 @@ let IncidentOpsTools = class IncidentOpsTools {
             'Conduct forensic analysis on compromised systems',
             'Update threat intelligence feeds',
         ];
+        if (emailAnalysis?.recommendedAction === 'quarantine' || emailAnalysis?.recommendedAction === 'block') {
+            recommendedActions.unshift('Quarantine the suspicious email and prevent user interaction');
+        }
+        if (emailAnalysis?.evidence?.some((e) => e.category === 'Authentication')) {
+            recommendedActions.unshift('Verify SPF, DKIM, and DMARC results for the sender domain');
+        }
+        if (emailAnalysis?.evidence?.some((e) => e.category === 'Attachments')) {
+            recommendedActions.unshift('Do not open any attachments until verified in a sandbox');
+        }
+        if (emailAnalysis?.evidence?.some((e) => e.category === 'URLs')) {
+            recommendedActions.unshift('Inspect all embedded URLs before allowing access');
+        }
+        if (emailAnalysis?.evidence?.some((e) => e.category === 'Brand Impersonation')) {
+            recommendedActions.unshift('Confirm sender legitimacy with the claimed brand through a trusted channel');
+        }
         const reportId = `INC-${Date.now()}`;
         const title = incidentTitle || 'Security Incident Report - Multi-Vector Threat';
         const executiveSummary = `
 A multi-vector security threat has been detected involving phishing, malicious URLs, and potential vulnerability exploitation.
-${emailAnalysis ? `Email analysis indicates a ${emailAnalysis.riskLevel} risk phishing attempt. ` : ''}
+${emailAnalysis ? `Email analysis indicates a ${emailAnalysis.riskLevel} risk phishing attempt with ${Math.round((emailAnalysis.confidence || 0) * 100)}% confidence. ` : ''}
 ${urlScan ? `URL scanning identified a ${urlScan.status} domain. ` : ''}
 ${cveData ? `CVE ${cveData.cveId} (CVSS ${cveData.cvssScore}) poses additional risk. ` : ''}
 Immediate action is required to contain and remediate this threat.
@@ -163,7 +195,7 @@ Immediate action is required to contain and remediate this threat.
             timestamp: new Date().toISOString(),
             executive_summary: executiveSummary,
             threat_analysis: threatAnalysis,
-            recommended_actions: recommendedActions,
+            recommended_actions: [...new Set(recommendedActions)],
             timeline,
             imageUrl: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop',
         };

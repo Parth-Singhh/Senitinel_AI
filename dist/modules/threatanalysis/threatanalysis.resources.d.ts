@@ -2,10 +2,10 @@ import { ExecutionContext } from '@nitrostack/core';
 /**
  * ThreatAnalysis Resources
  *
- * TODO: Add description
+ * Provides example threat-analysis metadata and dashboard-friendly resource data.
  */
 export declare class ThreatAnalysisResources {
-    exampleResource(context: ExecutionContext): Promise<{
+    overviewResource(context: ExecutionContext): Promise<{
         type: "text";
         text: string;
     }>;

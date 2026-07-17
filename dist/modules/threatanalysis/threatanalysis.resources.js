@@ -11,26 +11,56 @@ import { ResourceDecorator as Resource } from '@nitrostack/core';
 /**
  * ThreatAnalysis Resources
  *
- * TODO: Add description
+ * Provides example threat-analysis metadata and dashboard-friendly resource data.
  */
 export class ThreatAnalysisResources {
-    async exampleResource(context) {
-        // TODO: Implement resource logic
+    async overviewResource(context) {
         return {
             type: 'text',
-            text: JSON.stringify({ example: 'data' }, null, 2),
+            text: JSON.stringify({
+                tools: [
+                    {
+                        name: 'analyze_email',
+                        description: 'Analyze email for phishing indicators, auth failures, URL risk, attachments, and brand impersonation.',
+                    },
+                    {
+                        name: 'scan_url',
+                        description: 'Analyze a URL for suspicious patterns, impersonation, and delivery risk.',
+                    },
+                    {
+                        name: 'lookup_cve',
+                        description: 'Look up CVE data and mitigation guidance.',
+                    },
+                ],
+                supportedSignals: [
+                    'SPF/DKIM/DMARC',
+                    'Reply-To mismatch',
+                    'Display name spoofing',
+                    'Brand impersonation',
+                    'Suspicious URLs',
+                    'Dangerous attachments',
+                    'Grammar anomalies',
+                ],
+                outputFields: [
+                    'riskScore',
+                    'confidence',
+                    'recommendedAction',
+                    'evidence',
+                    'signalBreakdown',
+                ],
+            }, null, 2),
         };
     }
 }
 __decorate([
     Resource({
-        uri: 'threatanalysis://example',
-        name: 'Example Resource',
-        description: 'TODO: Add description',
+        uri: 'threatanalysis://overview',
+        name: 'Threat Analysis Overview',
+        description: 'Overview of available phishing, URL, and vulnerability analysis capabilities.',
         mimeType: 'application/json',
     }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
-], ThreatAnalysisResources.prototype, "exampleResource", null);
+], ThreatAnalysisResources.prototype, "overviewResource", null);
 //# sourceMappingURL=threatanalysis.resources.js.map

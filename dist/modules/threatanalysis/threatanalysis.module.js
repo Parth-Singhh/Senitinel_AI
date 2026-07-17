@@ -5,16 +5,18 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 import { Module } from '@nitrostack/core';
-import { ThreatAnalysisTools } from './threatanalysis.tools.js';
-import { ThreatAnalysisResources } from './threatanalysis.resources.js';
-import { ThreatAnalysisPrompts } from './threatanalysis.prompts.js';
+import { ThreatAnalysisTools } from './threatanalysis.tools';
+import { ThreatAnalysisResources } from './threatanalysis.resources';
+import { ThreatAnalysisPrompts } from './threatanalysis.prompts';
+import { EmailAnalysisService } from './email-analysis.service';
 let ThreatAnalysisModule = class ThreatAnalysisModule {
 };
 ThreatAnalysisModule = __decorate([
     Module({
         name: 'threatanalysis',
-        description: 'TODO: Add description',
+        description: 'Threat analysis module for phishing, URL, and vulnerability detection',
         controllers: [ThreatAnalysisTools, ThreatAnalysisResources, ThreatAnalysisPrompts],
+        providers: [EmailAnalysisService],
     })
 ], ThreatAnalysisModule);
 export { ThreatAnalysisModule };

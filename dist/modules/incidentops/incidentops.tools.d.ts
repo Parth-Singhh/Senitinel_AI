@@ -1,8 +1,5 @@
 import { ExecutionContext } from '@nitrostack/core';
 export declare class IncidentOpsTools {
-    /**
-     * Generate an executive security incident report combining multiple threat analyses
-     */
     generateReport(input: {
         emailAnalysis?: any;
         urlScan?: any;

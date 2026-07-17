@@ -1,38 +1,25 @@
 import { ExecutionContext } from '@nitrostack/core';
+import { EmailAnalysisService } from './email-analysis.service';
+import type { EmailAnalysisInput } from './email-types';
+/**
+ * ThreatAnalysis Tools
+ *
+ * Email, URL, and CVE analysis tools for security threat detection
+ */
 export declare class ThreatAnalysisTools {
-    /**
-     * Analyze email content for phishing and security threats
-     */
-    analyzeEmail(input: {
-        content: string;
-    }, context: ExecutionContext): Promise<{
-        riskScore: number;
-        riskLevel: string;
-        indicators: {
-            type: string;
-            description: string;
-            severity: string;
-        }[];
-        mitigation: string[];
-        summary: string;
-        imageUrl: string;
-    }>;
-    /**
-     * Scan a URL for security threats
-     */
+    private readonly emailAnalysisService;
+    constructor(emailAnalysisService: EmailAnalysisService);
+    analyzeEmail(input: EmailAnalysisInput, context: ExecutionContext): Promise<import("./email-types").EmailAnalysisResult>;
     scanUrl(input: {
         url: string;
     }, context: ExecutionContext): Promise<{
         url: string;
-        status: "safe" | "suspicious" | "malicious";
+        status: "malicious" | "suspicious" | "safe";
         threatExplanation: string;
         indicators: string[];
         riskScore: number;
         imageUrl: string;
     }>;
-    /**
-     * Look up CVE vulnerability information
-     */
     lookupCve(input: {
         cveId: string;
     }, context: ExecutionContext): Promise<any>;

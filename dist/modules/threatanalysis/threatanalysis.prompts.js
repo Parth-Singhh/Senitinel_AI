@@ -11,7 +11,7 @@ import { PromptDecorator as Prompt } from '@nitrostack/core';
 /**
  * ThreatAnalysis Prompts
  *
- * TODO: Add description
+ * Prompt helpers for phishing, URL, and vulnerability analysis guidance.
  */
 export class ThreatAnalysisPrompts {
     async helpPrompt(args, context) {
@@ -20,7 +20,34 @@ export class ThreatAnalysisPrompts {
                 role: 'user',
                 content: {
                     type: 'text',
-                    text: 'TODO: Add prompt content',
+                    text: 'How do I use the threat analysis tools effectively?',
+                },
+            },
+            {
+                role: 'assistant',
+                content: {
+                    type: 'text',
+                    text: `Use the threat analysis tools to inspect emails, URLs, and vulnerabilities.
+
+Email analysis returns:
+- riskScore
+- confidence
+- recommendedAction
+- evidence
+- signalBreakdown
+
+Interpretation:
+- allow: no strong threat indicators
+- warn: suspicious, but not severe
+- quarantine: likely phishing or malicious content
+- block: highly likely malicious
+
+Best practices:
+- verify sender authentication results
+- check reply-to and sender domain mismatches
+- inspect suspicious URLs and attachments
+- confirm brand impersonation against known legitimate domains
+- use the evidence list to understand why the score was raised`,
                 },
             },
         ];
@@ -29,7 +56,7 @@ export class ThreatAnalysisPrompts {
 __decorate([
     Prompt({
         name: 'threatanalysis-help',
-        description: 'TODO: Add description',
+        description: 'Help users understand the threat analysis tools and how to interpret results.',
     }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object, Object]),
