@@ -1,6 +1,13 @@
 'use client';
 
 import { useTheme, useWidgetSDK } from '@nitrostack/widgets';
+import { RiskGauge } from '../../components/RiskGauge';
+import { MetricCard } from '../../components/MetricCard';
+import { SeverityBadge } from '../../components/SeverityBadge';
+import { Timeline } from '../../components/Timeline';
+import { EvidencePanel } from '../../components/EvidencePanel';
+import { ActionButton } from '../../components/ActionButton';
+import '../../../widgets/theme.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +36,12 @@ interface ThreatData {
   recommended_actions?: string[];
   timeline?: Array<{ time: string; event: string }>;
   imageUrl?: string;
+  from?: { email: string; name?: string };
+  subject?: string;
+  spf?: string;
+  dkim?: string;
+  dmarc?: string;
+  confidence?: number;
 }
 
 export default function ThreatDashboard() {
@@ -41,650 +54,364 @@ export default function ThreatDashboard() {
       <div style={{
         padding: '24px',
         textAlign: 'center',
-        color: theme === 'dark' ? '#fff' : '#000',
+        color: '#f0f4f8',
+        background: '#0a0e27',
+        minHeight: '200px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}>
-        Loading threat analysis...
+        <div style={{ animation: 'pulse 2s ease-in-out infinite' }}>
+          🔍 Analyzing threat data...
+        </div>
       </div>
     );
   }
 
-  const isDark = theme === 'dark';
-  const bgColor = isDark ? '#0f172a' : '#f8fafc';
-  const cardBg = isDark ? '#1e293b' : '#ffffff';
-  const textColor = isDark ? '#f1f5f9' : '#0f172a';
-  const mutedColor = isDark ? '#94a3b8' : '#64748b';
-  const borderColor = isDark ? '#334155' : '#e2e8f0';
-
   const getRiskColor = (level?: string | number) => {
     if (typeof level === 'number') {
-      if (level >= 80) return '#ef4444';
-      if (level >= 60) return '#f97316';
-      if (level >= 40) return '#eab308';
-      return '#22c55e';
+      if (level >= 80) return '#ff1744';
+      if (level >= 60) return '#ff6d00';
+      if (level >= 40) return '#ffd600';
+      return '#00e676';
     }
     const levelStr = String(level).toLowerCase();
-    if (levelStr === 'critical') return '#ef4444';
-    if (levelStr === 'high') return '#f97316';
-    if (levelStr === 'medium') return '#eab308';
-    if (levelStr === 'malicious') return '#ef4444';
-    if (levelStr === 'suspicious') return '#f97316';
+    if (levelStr === 'critical') return '#ff1744';
+    if (levelStr === 'high') return '#ff6d00';
+    if (levelStr === 'medium') return '#ffd600';
+    if (levelStr === 'malicious') return '#ff1744';
+    if (levelStr === 'suspicious') return '#ff6d00';
     return '#22c55e';
   };
 
-  const getRiskLabel = (level?: string | number) => {
+  const getSeverityType = (level?: string | number): 'critical' | 'high' | 'medium' | 'low' | 'info' | 'safe' => {
     if (typeof level === 'number') {
-      if (level >= 80) return 'CRITICAL';
-      if (level >= 60) return 'HIGH';
-      if (level >= 40) return 'MEDIUM';
-      return 'LOW';
+      if (level >= 80) return 'critical';
+      if (level >= 60) return 'high';
+      if (level >= 40) return 'medium';
+      return 'low';
     }
-    return String(level).toUpperCase();
+    const levelStr = String(level).toLowerCase();
+    if (levelStr === 'critical') return 'critical';
+    if (levelStr === 'high') return 'high';
+    if (levelStr === 'medium') return 'medium';
+    if (levelStr === 'malicious') return 'critical';
+    if (levelStr === 'suspicious') return 'high';
+    if (levelStr === 'safe') return 'low';
+    return 'info';
   };
 
-  const renderRiskMeter = (score?: number) => {
-    if (score === undefined) return null;
-    const percentage = Math.min(score, 100);
-    return (
-      <div style={{
-        width: '100%',
-        height: '8px',
-        background: borderColor,
-        borderRadius: '4px',
-        overflow: 'hidden',
-        marginTop: '8px',
-      }}>
-        <div
-          style={{
-            width: `${percentage}%`,
-            height: '100%',
-            background: getRiskColor(score),
-            transition: 'width 0.3s ease',
-          }}
-        />
-      </div>
-    );
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const handleExport = () => {
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `threat-analysis-${Date.now()}.json`;
+    a.click();
   };
 
   // Detect report vs single analysis
   const isReport = !!data.reportId;
-
-  if (isReport) {
-    // Render incident report
-    return (
-      <div style={{
-        padding: '24px',
-        background: bgColor,
-        borderRadius: '12px',
-        color: textColor,
-        maxWidth: '800px',
-      }}>
-        {/* Header */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          marginBottom: '24px',
-          paddingBottom: '16px',
-          borderBottom: `1px solid ${borderColor}`,
-        }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '8px',
-            background: getRiskColor(data.severity),
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '24px',
-          }}>
-            🚨
-          </div>
-          <div style={{ flex: 1 }}>
-            <h2 style={{ margin: '0 0 4px 0', fontSize: '20px', fontWeight: 'bold' }}>
-              {data.title || 'Security Incident Report'}
-            </h2>
-            <p style={{ margin: 0, fontSize: '12px', color: mutedColor }}>
-              {data.reportId} • {new Date(data.timestamp || '').toLocaleString()}
-            </p>
-          </div>
-          <div style={{
-            padding: '8px 12px',
-            background: getRiskColor(data.severity),
-            color: 'white',
-            borderRadius: '6px',
-            fontSize: '12px',
-            fontWeight: 'bold',
-          }}>
-            {getRiskLabel(data.severity)}
-          </div>
-        </div>
-
-        {/* Executive Summary */}
-        <div style={{
-          background: cardBg,
-          border: `1px solid ${borderColor}`,
-          borderRadius: '8px',
-          padding: '16px',
-          marginBottom: '16px',
-        }}>
-          <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold' }}>
-            Executive Summary
-          </h3>
-          <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.6', color: mutedColor }}>
-            {data.executive_summary}
-          </p>
-        </div>
-
-        {/* Threat Analysis */}
-        {data.threat_analysis && (
-          <div style={{
-            background: cardBg,
-            border: `1px solid ${borderColor}`,
-            borderRadius: '8px',
-            padding: '16px',
-            marginBottom: '16px',
-          }}>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold' }}>
-              Threat Analysis
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              {data.threat_analysis.email_threat && (
-                <div style={{
-                  padding: '12px',
-                  background: isDark ? '#1a1f2e' : '#f1f5f9',
-                  borderRadius: '6px',
-                  borderLeft: `3px solid ${getRiskColor(data.threat_analysis.email_threat.status)}`,
-                }}>
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>
-                    📧 Email Threat
-                  </div>
-                  <div style={{ fontSize: '11px', color: mutedColor }}>
-                    Status: <strong>{data.threat_analysis.email_threat.status}</strong>
-                  </div>
-                  <div style={{ fontSize: '11px', color: mutedColor }}>
-                    Risk: <strong>{data.threat_analysis.email_threat.risk_score}%</strong>
-                  </div>
-                </div>
-              )}
-              {data.threat_analysis.url_threat && (
-                <div style={{
-                  padding: '12px',
-                  background: isDark ? '#1a1f2e' : '#f1f5f9',
-                  borderRadius: '6px',
-                  borderLeft: `3px solid ${getRiskColor(data.threat_analysis.url_threat.status)}`,
-                }}>
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>
-                    🔗 URL Threat
-                  </div>
-                  <div style={{ fontSize: '11px', color: mutedColor }}>
-                    Status: <strong>{data.threat_analysis.url_threat.status}</strong>
-                  </div>
-                  <div style={{ fontSize: '11px', color: mutedColor }}>
-                    Risk: <strong>{data.threat_analysis.url_threat.risk_score}%</strong>
-                  </div>
-                </div>
-              )}
-              {data.threat_analysis.vulnerability_threat && (
-                <div style={{
-                  padding: '12px',
-                  background: isDark ? '#1a1f2e' : '#f1f5f9',
-                  borderRadius: '6px',
-                  borderLeft: `3px solid ${getRiskColor(data.threat_analysis.vulnerability_threat.severity)}`,
-                }}>
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>
-                    🔓 Vulnerability
-                  </div>
-                  <div style={{ fontSize: '11px', color: mutedColor }}>
-                    CVE: <strong>{data.threat_analysis.vulnerability_threat.cve_id}</strong>
-                  </div>
-                  <div style={{ fontSize: '11px', color: mutedColor }}>
-                    CVSS: <strong>{data.threat_analysis.vulnerability_threat.cvss_score}</strong>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Timeline */}
-        {data.timeline && data.timeline.length > 0 && (
-          <div style={{
-            background: cardBg,
-            border: `1px solid ${borderColor}`,
-            borderRadius: '8px',
-            padding: '16px',
-            marginBottom: '16px',
-          }}>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold' }}>
-              Timeline
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {data.timeline.map((entry: any, idx: number) => (
-                <div key={idx} style={{ display: 'flex', gap: '12px' }}>
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: getRiskColor(data.severity),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '12px',
-                    flexShrink: 0,
-                  }}>
-                    {idx + 1}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
-                      {new Date(entry.time).toLocaleTimeString()}
-                    </div>
-                    <div style={{ fontSize: '12px', color: mutedColor }}>
-                      {entry.event}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Recommended Actions */}
-        {data.recommended_actions && data.recommended_actions.length > 0 && (
-          <div style={{
-            background: cardBg,
-            border: `1px solid ${borderColor}`,
-            borderRadius: '8px',
-            padding: '16px',
-          }}>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 'bold' }}>
-              Recommended Actions
-            </h3>
-            <ul style={{
-              margin: 0,
-              paddingLeft: '20px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-            }}>
-              {data.recommended_actions.map((action: string, idx: number) => (
-                <li key={idx} style={{ fontSize: '12px', color: mutedColor }}>
-                  {action}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Render single analysis (email, URL, or CVE)
   const isEmailAnalysis = !!data.riskScore && !data.url && !data.cveId;
   const isUrlScan = !!data.url;
   const isCveAnalysis = !!data.cveId;
 
   return (
     <div style={{
+      background: '#0a0e27',
+      color: '#f0f4f8',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      minHeight: '100vh',
       padding: '24px',
-      background: bgColor,
-      borderRadius: '12px',
-      color: textColor,
-      maxWidth: '600px',
     }}>
-      {isEmailAnalysis && (
-        <>
-          {/* Email Analysis Header */}
+      {/* Header with actions */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '24px',
+        paddingBottom: '16px',
+        borderBottom: '1px solid rgba(42, 58, 90, 0.4)',
+      }}>
+        <div>
+          <h1 style={{ margin: '0 0 4px 0', fontSize: '24px', fontWeight: 'bold' }}>
+            {isReport ? '🚨 Security Incident Report' : isEmailAnalysis ? '📧 Email Analysis' : isUrlScan ? '🔗 URL Scan' : '🔓 CVE Analysis'}
+          </h1>
+          <p style={{ margin: 0, fontSize: '12px', color: '#a8b5c8' }}>
+            {new Date(data.timestamp || Date.now()).toLocaleString()}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <ActionButton icon="📋" label="Copy" onClick={() => handleCopy(JSON.stringify(data))} variant="secondary" size="sm" />
+          <ActionButton icon="💾" label="Export" onClick={handleExport} variant="secondary" size="sm" />
+        </div>
+      </div>
+
+      {/* Main content grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+        gap: '20px',
+        marginBottom: '24px',
+      }}>
+        {/* Risk Score Card */}
+        {(data.riskScore !== undefined || data.cvssScore !== undefined) && (
           <div style={{
+            background: 'linear-gradient(135deg, rgba(26, 40, 71, 0.8) 0%, rgba(21, 29, 59, 0.6) 100%)',
+            border: '1px solid rgba(42, 58, 90, 0.6)',
+            borderRadius: '12px',
+            padding: '20px',
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             gap: '16px',
-            marginBottom: '20px',
+            animation: 'slideUp 500ms ease-out',
           }}>
-            <div style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '8px',
-              background: getRiskColor(data.riskScore),
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '28px',
-            }}>
-              📧
-            </div>
-            <div style={{ flex: 1 }}>
-              <h2 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: 'bold' }}>
-                Email Analysis
-              </h2>
-              <p style={{ margin: 0, fontSize: '12px', color: mutedColor }}>
-                Phishing Risk Assessment
-              </p>
-            </div>
-            <div style={{
-              padding: '8px 12px',
-              background: getRiskColor(data.riskLevel),
-              color: 'white',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              textAlign: 'center',
-            }}>
-              {getRiskLabel(data.riskLevel)}
+            <RiskGauge
+              score={data.riskScore ?? (data.cvssScore ?? 0) * 10}
+              size="md"
+              animated
+            />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '12px', color: '#a8b5c8', marginBottom: '4px' }}>
+                {data.riskScore !== undefined ? 'Risk Score' : 'CVSS Score'}
+              </div>
+              <SeverityBadge
+                severity={getSeverityType(data.riskScore ?? data.severity)}
+                size="md"
+              />
             </div>
           </div>
+        )}
 
-          {/* Risk Score */}
-          <div style={{
-            background: cardBg,
-            border: `1px solid ${borderColor}`,
-            borderRadius: '8px',
-            padding: '16px',
-            marginBottom: '16px',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Risk Score</span>
-              <span style={{ fontSize: '20px', fontWeight: 'bold', color: getRiskColor(data.riskScore) }}>
-                {data.riskScore}%
-              </span>
-            </div>
-            {renderRiskMeter(data.riskScore)}
-          </div>
+        {/* Status Card */}
+        {(data.status || data.severity) && (
+          <MetricCard
+            icon={data.status === 'safe' ? '✓' : data.status === 'suspicious' ? '⚠️' : data.status === 'malicious' ? '🚨' : '❓'}
+            title={data.status ? 'URL Status' : 'Severity'}
+            value={data.status?.toUpperCase() || data.severity?.toUpperCase() || 'UNKNOWN'}
+            severity={getSeverityType(data.status || data.severity)}
+            animated
+          />
+        )}
 
-          {/* Indicators */}
-          {data.indicators && data.indicators.length > 0 && (
+        {/* Confidence Score */}
+        {data.confidence !== undefined && (
+          <MetricCard
+            icon="🎯"
+            title="Confidence"
+            value={`${data.confidence}%`}
+            severity={data.confidence >= 80 ? 'high' : data.confidence >= 60 ? 'medium' : 'low'}
+            animated
+          />
+        )}
+
+        {/* CVE ID Card */}
+        {data.cveId && (
+          <MetricCard
+            icon="🔓"
+            title="CVE ID"
+            value={data.cveId}
+            severity={getSeverityType(data.severity)}
+            animated
+          />
+        )}
+      </div>
+
+      {/* Email-specific details */}
+      {isEmailAnalysis && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+          gap: '16px',
+          marginBottom: '24px',
+        }}>
+          {data.from && (
             <div style={{
-              background: cardBg,
-              border: `1px solid ${borderColor}`,
+              background: 'rgba(26, 40, 71, 0.4)',
+              border: '1px solid rgba(42, 58, 90, 0.6)',
               borderRadius: '8px',
-              padding: '16px',
-              marginBottom: '16px',
+              padding: '12px',
             }}>
-              <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
-                Suspicious Indicators
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {(data.indicators as any[]).map((indicator: any, idx: number) => (
-                  <div key={idx} style={{
-                    padding: '10px',
-                    background: isDark ? '#1a1f2e' : '#f1f5f9',
-                    borderRadius: '6px',
-                    borderLeft: `3px solid ${getRiskColor(indicator.severity || 'medium')}`,
-                  }}>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '2px' }}>
-                      {indicator.type}
-                    </div>
-                    <div style={{ fontSize: '11px', color: mutedColor }}>
-                      {indicator.description}
-                    </div>
-                  </div>
-                ))}
+              <div style={{ fontSize: '11px', color: '#a8b5c8', marginBottom: '4px' }}>From</div>
+              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#f0f4f8', wordBreak: 'break-all' }}>
+                {data.from.name ? `${data.from.name} <${data.from.email}>` : data.from.email}
               </div>
             </div>
           )}
-
-          {/* Mitigation */}
-          {data.mitigation && data.mitigation.length > 0 && (
+          {data.subject && (
             <div style={{
-              background: cardBg,
-              border: `1px solid ${borderColor}`,
+              background: 'rgba(26, 40, 71, 0.4)',
+              border: '1px solid rgba(42, 58, 90, 0.6)',
               borderRadius: '8px',
-              padding: '16px',
+              padding: '12px',
             }}>
-              <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
-                Mitigation Recommendations
-              </h3>
-              <ul style={{
-                margin: 0,
-                paddingLeft: '20px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-              }}>
-                {data.mitigation.map((item: string, idx: number) => (
-                  <li key={idx} style={{ fontSize: '11px', color: mutedColor }}>
-                    {item}
-                  </li>
-                ))}
-              </ul>
+              <div style={{ fontSize: '11px', color: '#a8b5c8', marginBottom: '4px' }}>Subject</div>
+              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#f0f4f8' }}>
+                {data.subject}
+              </div>
             </div>
           )}
-        </>
+          {/* Auth badges */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {data.spf && <SeverityBadge severity={data.spf === 'pass' ? 'low' : 'high'} size="sm" showIcon={false} />}
+            {data.dkim && <SeverityBadge severity={data.dkim === 'pass' ? 'low' : 'high'} size="sm" showIcon={false} />}
+            {data.dmarc && <SeverityBadge severity={data.dmarc === 'pass' ? 'low' : 'high'} size="sm" showIcon={false} />}
+          </div>
+        </div>
       )}
 
-      {isUrlScan && (
-        <>
-          {/* URL Scan Header */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '16px',
-            marginBottom: '20px',
-          }}>
-            <div style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '8px',
-              background: getRiskColor(data.status),
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '28px',
-            }}>
-              🔗
-            </div>
-            <div style={{ flex: 1 }}>
-              <h2 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: 'bold' }}>
-                URL Scan Result
-              </h2>
-              <p style={{ margin: 0, fontSize: '12px', color: mutedColor, wordBreak: 'break-all' }}>
-                {data.url}
-              </p>
-            </div>
-            <div style={{
-              padding: '8px 12px',
-              background: getRiskColor(data.status),
-              color: 'white',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              textAlign: 'center',
-            }}>
-              {getRiskLabel(data.status)}
-            </div>
-          </div>
-
-          {/* Threat Explanation */}
-          <div style={{
-            background: cardBg,
-            border: `1px solid ${borderColor}`,
-            borderRadius: '8px',
-            padding: '16px',
-            marginBottom: '16px',
-          }}>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 'bold' }}>
-              Threat Assessment
-            </h3>
-            <p style={{ margin: 0, fontSize: '12px', color: mutedColor, lineHeight: '1.5' }}>
-              {data.threatExplanation}
-            </p>
-          </div>
-
-          {/* Risk Score */}
-          <div style={{
-            background: cardBg,
-            border: `1px solid ${borderColor}`,
-            borderRadius: '8px',
-            padding: '16px',
-            marginBottom: '16px',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 'bold' }}>Risk Score</span>
-              <span style={{ fontSize: '20px', fontWeight: 'bold', color: getRiskColor(data.riskScore) }}>
-                {data.riskScore}%
-              </span>
-            </div>
-            {renderRiskMeter(data.riskScore)}
-          </div>
-
-          {/* Indicators */}
-          {data.indicators && data.indicators.length > 0 && (
-            <div style={{
-              background: cardBg,
-              border: `1px solid ${borderColor}`,
-              borderRadius: '8px',
-              padding: '16px',
-            }}>
-              <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
-                Threat Indicators
-              </h3>
-              <ul style={{
-                margin: 0,
-                paddingLeft: '20px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-              }}>
-                {(data.indicators as string[]).map((indicator: string, idx: number) => (
-                  <li key={idx} style={{ fontSize: '11px', color: mutedColor }}>
-                    {indicator}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </>
+      {/* URL-specific details */}
+      {isUrlScan && data.url && (
+        <div style={{
+          background: 'rgba(26, 40, 71, 0.4)',
+          border: '1px solid rgba(42, 58, 90, 0.6)',
+          borderRadius: '8px',
+          padding: '12px',
+          marginBottom: '24px',
+          wordBreak: 'break-all',
+          fontSize: '12px',
+          color: '#a8b5c8',
+          fontFamily: 'monospace',
+        }}>
+          {data.url}
+        </div>
       )}
 
-      {isCveAnalysis && (
-        <>
-          {/* CVE Header */}
-          <div style={{
+      {/* Threat Explanation */}
+      {data.threatExplanation && (
+        <div style={{
+          background: 'rgba(26, 40, 71, 0.4)',
+          border: '1px solid rgba(42, 58, 90, 0.6)',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '24px',
+        }}>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 'bold' }}>
+            Threat Assessment
+          </h3>
+          <p style={{ margin: 0, fontSize: '12px', color: '#a8b5c8', lineHeight: '1.6' }}>
+            {data.threatExplanation}
+          </p>
+        </div>
+      )}
+
+      {/* Summary */}
+      {data.summary && (
+        <div style={{
+          background: 'rgba(26, 40, 71, 0.4)',
+          border: '1px solid rgba(42, 58, 90, 0.6)',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '24px',
+        }}>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 'bold' }}>
+            Summary
+          </h3>
+          <p style={{ margin: 0, fontSize: '12px', color: '#a8b5c8', lineHeight: '1.6' }}>
+            {data.summary}
+          </p>
+        </div>
+      )}
+
+      {/* Evidence Panel */}
+      {data.indicators && data.indicators.length > 0 && (
+        <div style={{ marginBottom: '24px' }}>
+          <EvidencePanel
+            evidence={(data.indicators as any[]).map((ind, idx) => ({
+              id: `ind-${idx}`,
+              type: 'indicator',
+              title: typeof ind === 'string' ? ind : ind.type || 'Indicator',
+              description: typeof ind === 'string' ? '' : ind.description || '',
+              severity: typeof ind === 'string' ? 'medium' : (ind.severity as any),
+            }))}
+            title="Suspicious Indicators"
+          />
+        </div>
+      )}
+
+      {/* Affected Software */}
+      {data.affectedSoftware && data.affectedSoftware.length > 0 && (
+        <div style={{
+          background: 'rgba(26, 40, 71, 0.4)',
+          border: '1px solid rgba(42, 58, 90, 0.6)',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '24px',
+        }}>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
+            Affected Software
+          </h3>
+          <ul style={{
+            margin: 0,
+            paddingLeft: '20px',
             display: 'flex',
-            alignItems: 'center',
-            gap: '16px',
-            marginBottom: '20px',
+            flexDirection: 'column',
+            gap: '6px',
           }}>
-            <div style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '8px',
-              background: getRiskColor(data.severity),
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '28px',
-            }}>
-              🔓
-            </div>
-            <div style={{ flex: 1 }}>
-              <h2 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: 'bold' }}>
-                {data.cveId}
-              </h2>
-              <p style={{ margin: 0, fontSize: '12px', color: mutedColor }}>
-                Vulnerability Information
-              </p>
-            </div>
-            <div style={{
-              padding: '8px 12px',
-              background: getRiskColor(data.severity),
-              color: 'white',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              textAlign: 'center',
-            }}>
-              {getRiskLabel(data.severity)}
-            </div>
-          </div>
+            {data.affectedSoftware.map((software, idx) => (
+              <li key={idx} style={{ fontSize: '12px', color: '#a8b5c8' }}>
+                {software}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
-          {/* Summary */}
-          <div style={{
-            background: cardBg,
-            border: `1px solid ${borderColor}`,
-            borderRadius: '8px',
-            padding: '16px',
-            marginBottom: '16px',
+      {/* Timeline */}
+      {data.timeline && data.timeline.length > 0 && (
+        <div style={{
+          background: 'rgba(26, 40, 71, 0.4)',
+          border: '1px solid rgba(42, 58, 90, 0.6)',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '24px',
+        }}>
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '13px', fontWeight: 'bold' }}>
+            Timeline
+          </h3>
+          <Timeline
+            events={data.timeline.map((entry, idx) => ({
+              id: `event-${idx}`,
+              timestamp: entry.time,
+              title: entry.event,
+              severity: 'info',
+            }))}
+            compact
+          />
+        </div>
+      )}
+
+      {/* Mitigation / Recommendations */}
+      {(data.mitigation || data.recommended_actions) && (
+        <div style={{
+          background: 'rgba(26, 40, 71, 0.4)',
+          border: '1px solid rgba(42, 58, 90, 0.6)',
+          borderRadius: '8px',
+          padding: '16px',
+        }}>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
+            Recommended Actions
+          </h3>
+          <ul style={{
+            margin: 0,
+            paddingLeft: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
           }}>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: 'bold' }}>
-              Summary
-            </h3>
-            <p style={{ margin: 0, fontSize: '12px', color: mutedColor, lineHeight: '1.5' }}>
-              {data.summary}
-            </p>
-          </div>
-
-          {/* CVSS Score */}
-          <div style={{
-            background: cardBg,
-            border: `1px solid ${borderColor}`,
-            borderRadius: '8px',
-            padding: '16px',
-            marginBottom: '16px',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 'bold' }}>CVSS Score</span>
-              <span style={{ fontSize: '20px', fontWeight: 'bold', color: getRiskColor(data.cvssScore) }}>
-                {data.cvssScore}/10
-              </span>
-            </div>
-            {renderRiskMeter((data.cvssScore ?? 0) * 10)}
-          </div>
-
-          {/* Affected Software */}
-          {data.affectedSoftware && data.affectedSoftware.length > 0 && (
-            <div style={{
-              background: cardBg,
-              border: `1px solid ${borderColor}`,
-              borderRadius: '8px',
-              padding: '16px',
-              marginBottom: '16px',
-            }}>
-              <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
-                Affected Software
-              </h3>
-              <ul style={{
-                margin: 0,
-                paddingLeft: '20px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-              }}>
-                {data.affectedSoftware.map((software: string, idx: number) => (
-                  <li key={idx} style={{ fontSize: '11px', color: mutedColor }}>
-                    {software}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Mitigation */}
-          {data.mitigation && data.mitigation.length > 0 && (
-            <div style={{
-              background: cardBg,
-              border: `1px solid ${borderColor}`,
-              borderRadius: '8px',
-              padding: '16px',
-            }}>
-              <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
-                Mitigation Recommendations
-              </h3>
-              <ul style={{
-                margin: 0,
-                paddingLeft: '20px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-              }}>
-                {data.mitigation.map((item: string, idx: number) => (
-                  <li key={idx} style={{ fontSize: '11px', color: mutedColor }}>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </>
+            {(data.mitigation || data.recommended_actions || []).map((action, idx) => (
+              <li key={idx} style={{ fontSize: '12px', color: '#a8b5c8' }}>
+                {action}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

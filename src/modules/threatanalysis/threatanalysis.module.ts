@@ -1,8 +1,8 @@
 import { Module } from '@nitrostack/core';
-import { ThreatAnalysisTools } from './threatanalysis.tools';
-import { ThreatAnalysisResources } from './threatanalysis.resources';
-import { ThreatAnalysisPrompts } from './threatanalysis.prompts';
-import { EmailAnalysisService } from './email-analysis.service';
+import { ThreatAnalysisTools } from './threatanalysis.tools.js';
+import { ThreatAnalysisResources } from './threatanalysis.resources.js';
+import { ThreatAnalysisPrompts } from './threatanalysis.prompts.js';
+import { EmailAnalysisService } from './email-analysis.service.js';
 
 @Module({
   name: 'threatanalysis',

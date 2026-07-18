@@ -1,472 +1,379 @@
 import { Injectable } from '@nitrostack/core';
-import {
-  AuthStatus,
-  EmailAnalysisInput,
-  EmailAnalysisResult,
-  EvidenceItem,
-  RiskLevel,
-  RecommendedAction,
-  SignalBreakdown,
-  Severity,
-} from './email-types';
-import {
-  BRAND_NAMES,
-  AUTHORITY_REGEX,
-  CREDENTIAL_REGEX,
-  DEFAULT_MITIGATION,
-  DANGEROUS_ATTACHMENT_REGEX,
-  FINANCIAL_REGEX,
-  GRAMMAR_REGEX,
-  HOMOGLYPH_REGEX,
-  HTTP_REGEX,
-  IP_URL_REGEX,
-  LOGIN_PATH_REGEX,
-  MIME_FILENAME_MISMATCH_PATTERNS,
-  SHORTENER_REGEX,
-  SUSPICIOUS_TLD_REGEX,
-  THREAT_REGEX,
-  URGENCY_REGEX,
-} from './email-rules';
-import {
-  extractDomain,
-  extractUrlsFromText,
-  normalizeText,
-  uniqueStrings,
-} from './email-normalizer';
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function getRiskLevel(score: number): RiskLevel {
-  if (score <= 20) return 'safe';
-  if (score <= 45) return 'low';
-  if (score <= 70) return 'medium';
-  if (score <= 90) return 'high';
-  return 'critical';
-}
-
-function getRecommendedAction(score: number, evidence: EvidenceItem[]): RecommendedAction {
-  const hasCritical = evidence.some((e) => e.severity === 'critical');
-  if (score >= 91 || hasCritical) return 'block';
-  if (score >= 71) return 'quarantine';
-  if (score >= 46) return 'warn';
-  return 'allow';
-}
+import type { EmailAnalysisInput } from './email-types.js';
 
 @Injectable()
 export class EmailAnalysisService {
-  scoreSenderAuth(auth?: {
-    spf?: AuthStatus;
-    dkim?: AuthStatus;
-    dmarc?: AuthStatus;
-  }): { score: number; evidence: EvidenceItem[] } {
-    const evidence: EvidenceItem[] = [];
-    let score = 0;
+  async analyze(input: EmailAnalysisInput) {
+    let riskScore = 0;
+    const indicators: Array<{ type: string; description: string; severity: string }> = [];
+    const mitigation: string[] = [];
 
-    if (auth?.spf === 'fail') {
-      score += 20;
-      evidence.push({ category: 'Authentication', signal: 'SPF failed', severity: 'high', weight: 20 });
-    } else if (auth?.spf === 'softfail') {
-      score += 10;
-      evidence.push({ category: 'Authentication', signal: 'SPF softfail', severity: 'medium', weight: 10 });
-    }
+    // 1. Sender Authentication Check
+    const authScore = this.checkAuthentication(input.auth);
+    riskScore += authScore.score;
+    indicators.push(...authScore.indicators);
 
-    if (auth?.dkim === 'fail') {
-      score += 20;
-      evidence.push({ category: 'Authentication', signal: 'DKIM failed', severity: 'high', weight: 20 });
-    }
+    // 2. Display Name Spoofing
+    const displayNameCheck = this.checkDisplayNameSpoofing(input.from);
+    riskScore += displayNameCheck.score;
+    indicators.push(...displayNameCheck.indicators);
 
-    if (auth?.dmarc === 'fail') {
-      score += 25;
-      evidence.push({ category: 'Authentication', signal: 'DMARC failed', severity: 'critical', weight: 25 });
-    } else if (auth?.dmarc === 'none') {
-      score += 8;
-      evidence.push({ category: 'Authentication', signal: 'DMARC missing', severity: 'medium', weight: 8 });
-    }
-
-    return { score: clamp(score, 0, 40), evidence };
-  }
-
-  scoreSenderIdentity(input: {
-    fromName?: string;
-    fromEmail: string;
-    replyTo?: string;
-    subject?: string;
-    bodyText: string;
-  }): { score: number; evidence: EvidenceItem[] } {
-    const evidence: EvidenceItem[] = [];
-    let score = 0;
-
-    const fromDomain = extractDomain(input.fromEmail);
-    const replyToDomain = extractDomain(input.replyTo);
-    const body = normalizeText(input.bodyText);
-    const subject = normalizeText(input.subject || '');
-
-    if (input.fromName) {
-      for (const brand of BRAND_NAMES) {
-        const brandRegex = new RegExp(`\\b${brand.replace(/\s+/g, '\\s+')}\\b`, 'i');
-        if (brandRegex.test(input.fromName) && fromDomain && !fromDomain.includes(brand.replace(/\s+/g, ''))) {
-          score += 18;
-          evidence.push({
-            category: 'Sender Identity',
-            signal: `Display name spoofing: "${input.fromName}" from ${fromDomain}`,
-            severity: 'high',
-            weight: 18,
-          });
-          break;
-        }
-      }
-    }
-
-    if (replyToDomain && fromDomain && replyToDomain !== fromDomain) {
-      score += 15;
-      evidence.push({
-        category: 'Sender Identity',
-        signal: 'Reply-To mismatch',
-        severity: 'high',
-        weight: 15,
-        details: `From domain ${fromDomain} differs from Reply-To domain ${replyToDomain}`,
-      });
-    }
-
-    if (HOMOGLYPH_REGEX.test(input.fromEmail) || HOMOGLYPH_REGEX.test(input.fromName || '') || HOMOGLYPH_REGEX.test(subject) || HOMOGLYPH_REGEX.test(body)) {
-      score += 12;
-      evidence.push({
-        category: 'Sender Identity',
-        signal: 'Homoglyph / lookalike brand variant detected',
-        severity: 'medium',
-        weight: 12,
-      });
-    }
-
-    return { score: clamp(score, 0, 35), evidence };
-  }
-
-  scoreBodyLanguage(bodyText: string): { score: number; evidence: EvidenceItem[] } {
-    const evidence: EvidenceItem[] = [];
-    let score = 0;
-
-    if (URGENCY_REGEX.test(bodyText)) {
-      score += 10;
-      evidence.push({ category: 'Body Language', signal: 'Urgency language', severity: 'medium', weight: 10 });
-    }
-
-    if (THREAT_REGEX.test(bodyText)) {
-      score += 12;
-      evidence.push({ category: 'Body Language', signal: 'Threat / account lock language', severity: 'high', weight: 12 });
-    }
-
-    if (CREDENTIAL_REGEX.test(bodyText)) {
-      score += 14;
-      evidence.push({ category: 'Body Language', signal: 'Credential harvesting language', severity: 'high', weight: 14 });
-    }
-
-    if (FINANCIAL_REGEX.test(bodyText)) {
-      score += 8;
-      evidence.push({ category: 'Body Language', signal: 'Financial manipulation language', severity: 'medium', weight: 8 });
-    }
-
-    if (AUTHORITY_REGEX.test(bodyText)) {
-      score += 7;
-      evidence.push({ category: 'Body Language', signal: 'Authority impersonation language', severity: 'medium', weight: 7 });
-    }
-
-    if (GRAMMAR_REGEX.test(bodyText)) {
-      score += 3;
-      evidence.push({ category: 'Body Language', signal: 'Grammar/spelling anomalies', severity: 'low', weight: 3 });
-    }
-
-    return { score: clamp(score, 0, 30), evidence };
-  }
-
-  scoreUrls(urls: string[], bodyText: string): { score: number; evidence: EvidenceItem[] } {
-    const evidence: EvidenceItem[] = [];
-    let score = 0;
-    const allUrls = uniqueStrings([...urls, ...extractUrlsFromText(bodyText)]);
-
-    for (const url of allUrls) {
-      const normalized = url.trim();
-
-      if (HTTP_REGEX.test(normalized)) {
-        score += 10;
-        evidence.push({ category: 'URLs', signal: 'HTTP instead of HTTPS', severity: 'medium', weight: 10, details: normalized });
-      }
-
-      if (IP_URL_REGEX.test(normalized)) {
-        score += 20;
-        evidence.push({ category: 'URLs', signal: 'IP address used in URL', severity: 'high', weight: 20, details: normalized });
-      }
-
-      if (SHORTENER_REGEX.test(normalized)) {
-        score += 15;
-        evidence.push({ category: 'URLs', signal: 'URL shortener detected', severity: 'high', weight: 15, details: normalized });
-      }
-
-      if (SUSPICIOUS_TLD_REGEX.test(normalized)) {
-        score += 15;
-        evidence.push({ category: 'URLs', signal: 'Suspicious top-level domain', severity: 'high', weight: 15, details: normalized });
-      }
-
-      if (/xn--/i.test(normalized)) {
-        score += 20;
-        evidence.push({ category: 'URLs', signal: 'Punycode / internationalized domain detected', severity: 'high', weight: 20, details: normalized });
-      }
-
-      if ((normalized.match(/\./g) || []).length >= 4) {
-        score += 8;
-        evidence.push({ category: 'URLs', signal: 'Deep subdomain chain detected', severity: 'medium', weight: 8, details: normalized });
-      }
-
-      if (LOGIN_PATH_REGEX.test(normalized)) {
-        score += 10;
-        evidence.push({ category: 'URLs', signal: 'Credential / account action keyword in URL', severity: 'medium', weight: 10, details: normalized });
-      }
-
-      if (/redirect|return=|continue=|url=/i.test(normalized)) {
-        score += 8;
-        evidence.push({ category: 'URLs', signal: 'Redirect parameter detected', severity: 'medium', weight: 8, details: normalized });
-      }
-    }
-
-    return { score: clamp(score, 0, 35), evidence };
-  }
-
-  scoreAttachments(attachments?: Array<{ filename: string; mimeType?: string; size?: number }>): { score: number; evidence: EvidenceItem[] } {
-    const evidence: EvidenceItem[] = [];
-    let score = 0;
-
-    for (const attachment of attachments || []) {
-      const filename = attachment.filename.toLowerCase();
-      const mimeType = (attachment.mimeType || '').toLowerCase();
-
-      if (DANGEROUS_ATTACHMENT_REGEX.test(filename)) {
-        score += 20;
-        evidence.push({
-          category: 'Attachments',
-          signal: `Dangerous attachment type: ${attachment.filename}`,
-          severity: 'critical',
-          weight: 20,
-        });
-      }
-
-      if (/\.(pdf|docx?|xlsx?|pptx?|zip|rar|iso)\.exe$/i.test(filename)) {
-        score += 25;
-        evidence.push({
-          category: 'Attachments',
-          signal: `Double-extension attachment: ${attachment.filename}`,
-          severity: 'critical',
-          weight: 25,
-        });
-      }
-
-      for (const rule of MIME_FILENAME_MISMATCH_PATTERNS) {
-        if (rule.ext.test(filename) && rule.mime.test(mimeType)) {
-          score += 12;
-          evidence.push({
-            category: 'Attachments',
-            signal: rule.label,
-            severity: 'high',
-            weight: 12,
-            details: `${attachment.filename} / ${attachment.mimeType || 'unknown MIME type'}`,
-          });
-          break;
-        }
-      }
-
-      if (/\b(invoice|payment|urgent|secure|document|scan|copy|details)\b/i.test(filename)) {
-        score += 5;
-        evidence.push({
-          category: 'Attachments',
-          signal: 'Social-engineering filename',
-          severity: 'low',
-          weight: 5,
-          details: attachment.filename,
-        });
-      }
-    }
-
-    return { score: clamp(score, 0, 25), evidence };
-  }
-
-  scoreBrandImpersonation(input: {
-    subject?: string;
-    bodyText: string;
-    fromEmail: string;
-    fromName?: string;
-  }): { score: number; evidence: EvidenceItem[] } {
-    const evidence: EvidenceItem[] = [];
-    let score = 0;
-
-    const fromDomain = extractDomain(input.fromEmail) || '';
-    const body = normalizeText(input.bodyText);
-    const subject = normalizeText(input.subject || '');
-    const fromName = normalizeText(input.fromName || '');
-
-    for (const brand of BRAND_NAMES) {
-      const brandRegex = new RegExp(`\\b${brand.replace(/\s+/g, '\\s+')}\\b`, 'i');
-      const brandFound = brandRegex.test(body) || brandRegex.test(subject) || brandRegex.test(fromName);
-
-      if (brandFound && fromDomain && !fromDomain.includes(brand.replace(/\s+/g, ''))) {
-        score += 15;
-        evidence.push({
-          category: 'Brand Impersonation',
-          signal: `Brand mention without matching sender domain: ${brand}`,
+    // 3. Reply-To Mismatch
+    if (input.replyTo && input.from.email) {
+      const replyToDomain = input.replyTo.split('@')[1];
+      const fromDomain = input.from.domain || input.from.email.split('@')[1];
+      if (replyToDomain !== fromDomain) {
+        riskScore += 15;
+        indicators.push({
+          type: 'Reply-To Mismatch',
+          description: `Reply-To domain (${replyToDomain}) differs from sender domain (${fromDomain})`,
           severity: 'high',
-          weight: 15,
-          details: `Sender domain: ${fromDomain}`,
         });
       }
     }
 
-    return { score: clamp(score, 0, 20), evidence };
-  }
+    // 4. Brand Impersonation Detection
+    const brandCheck = this.checkBrandImpersonation(input.from, input.subject, input.bodyText);
+    riskScore += brandCheck.score;
+    indicators.push(...brandCheck.indicators);
 
-  calibrateFinalScore(parts: SignalBreakdown): number {
-    const weighted =
-      parts.sender * 0.25 +
-      parts.auth * 0.20 +
-      parts.urls * 0.25 +
-      parts.attachments * 0.15 +
-      parts.body * 0.10 +
-      parts.brand * 0.05 +
-      parts.grammar * 0.05;
+    // 5. URL Analysis
+    const urlCheck = this.analyzeUrls(input.urls || []);
+    riskScore += urlCheck.score;
+    indicators.push(...urlCheck.indicators);
 
-    return clamp(Math.round(weighted), 0, 100);
-  }
+    // 6. Attachment Analysis
+    const attachmentCheck = this.analyzeAttachments(input.attachments || []);
+    riskScore += attachmentCheck.score;
+    indicators.push(...attachmentCheck.indicators);
 
-  buildMitigation(evidence: EvidenceItem[]): string[] {
-    const actions = new Set<string>();
+    // 7. Social Engineering Signals
+    const socialEngCheck = this.detectSocialEngineering(input.subject, input.bodyText);
+    riskScore += socialEngCheck.score;
+    indicators.push(...socialEngCheck.indicators);
 
-    for (const item of evidence) {
-      const signal = item.signal.toLowerCase();
+    // 8. Urgency Tactics
+    const urgencyCheck = this.detectUrgency(input.subject, input.bodyText);
+    riskScore += urgencyCheck.score;
+    indicators.push(...urgencyCheck.indicators);
 
-      if (item.category === 'Authentication') {
-        actions.add('Verify SPF, DKIM, and DMARC results for the sender domain');
-        actions.add('Check whether the sender address and reply-to domain match');
-      }
+    // 9. Credential Harvesting Patterns
+    const credentialCheck = this.detectCredentialHarvesting(input.bodyText, input.bodyHtml);
+    riskScore += credentialCheck.score;
+    indicators.push(...credentialCheck.indicators);
 
-      if (item.category === 'URLs') {
-        actions.add('Do not click suspicious links');
-        actions.add('Inspect the destination domain before opening the URL');
-      }
+    // Clamp score to 0-100
+    riskScore = Math.min(Math.max(riskScore, 0), 100);
 
-      if (item.category === 'Attachments') {
-        actions.add('Do not open the attachment until verified');
-        actions.add('Scan the attachment in an isolated sandbox');
-      }
+    // Determine risk level
+    let riskLevel = 'low';
+    if (riskScore >= 80) riskLevel = 'critical';
+    else if (riskScore >= 60) riskLevel = 'high';
+    else if (riskScore >= 40) riskLevel = 'medium';
 
-      if (item.category === 'Body Language') {
-        actions.add('Verify requests for credentials or urgent actions through a trusted channel');
-      }
-
-      if (item.category === 'Brand Impersonation') {
-        actions.add('Validate whether the sender is authorized to represent the brand');
-      }
-
-      if (signal.includes('credential')) {
-        actions.add('Never share passwords, OTPs, or verification codes by email');
-      }
-
-      if (signal.includes('payment') || signal.includes('wire') || signal.includes('gift card')) {
-        actions.add('Confirm any payment or transfer request with a second channel');
-      }
+    // Generate mitigation recommendations
+    if (riskScore >= 80) {
+      mitigation.push('⛔ Do NOT click any links or download attachments');
+      mitigation.push('🚨 Report this email as phishing immediately');
+      mitigation.push('🔒 Change your password if you clicked any links');
+    } else if (riskScore >= 60) {
+      mitigation.push('⚠️ Exercise extreme caution with this email');
+      mitigation.push('🔍 Verify sender identity through alternative channels');
+      mitigation.push('🚫 Do not download attachments unless verified');
+    } else if (riskScore >= 40) {
+      mitigation.push('✓ Review email carefully before taking action');
+      mitigation.push('🔗 Hover over links to verify URLs before clicking');
+      mitigation.push('📧 Contact sender directly if suspicious');
+    } else {
+      mitigation.push('✓ Email appears legitimate');
+      mitigation.push('🔒 Standard security practices apply');
     }
 
-    if (actions.size === 0) {
-      actions.add(DEFAULT_MITIGATION[0]);
-    }
-
-    return [...actions];
-  }
-
-  buildIndicators(evidence: EvidenceItem[]) {
-    return evidence.map((item) => ({
-      type: item.category,
-      description: item.signal,
-      severity: item.severity,
-    }));
-  }
-
-  analyze(input: EmailAnalysisInput): EmailAnalysisResult {
-    const fromDomain = extractDomain(input.from.domain || input.from.email);
-    const replyToDomain = extractDomain(input.replyTo);
-    const bodyText = input.bodyText || '';
-    const urls = input.urls || extractUrlsFromText(bodyText);
-
-    const authResult = this.scoreSenderAuth(input.auth);
-    const senderIdentityResult = this.scoreSenderIdentity({
-      fromName: input.from.name,
-      fromEmail: input.from.email,
-      replyTo: input.replyTo,
-      subject: input.subject,
-      bodyText,
-    });
-    const bodyResult = this.scoreBodyLanguage(bodyText);
-    const urlResult = this.scoreUrls(urls, bodyText);
-    const attachmentResult = this.scoreAttachments(input.attachments);
-    const brandResult = this.scoreBrandImpersonation({
-      subject: input.subject,
-      bodyText,
-      fromEmail: input.from.email,
-      fromName: input.from.name,
-    });
-
-    const grammarScore = bodyResult.evidence.some((e) => e.signal === 'Grammar/spelling anomalies') ? 5 : 0;
-
-    const signalBreakdown = {
-      sender: senderIdentityResult.score,
-      auth: authResult.score,
-      body: bodyResult.score,
-      urls: urlResult.score,
-      attachments: attachmentResult.score,
-      brand: brandResult.score,
-      grammar: grammarScore,
-    };
-
-    const evidence = [
-      ...authResult.evidence,
-      ...senderIdentityResult.evidence,
-      ...bodyResult.evidence,
-      ...urlResult.evidence,
-      ...attachmentResult.evidence,
-      ...brandResult.evidence,
-    ];
-
-    const riskScore = this.calibrateFinalScore(signalBreakdown);
-    const confidence = clamp(
-      0.55 + evidence.length * 0.04 + (input.auth?.dmarc === 'pass' ? 0.03 : 0) - (input.auth?.dmarc === 'fail' ? 0.08 : 0),
-      0.5,
-      0.99
-    );
-
-    const riskLevel = getRiskLevel(riskScore);
-    const recommendedAction = getRecommendedAction(riskScore, evidence);
-    const mitigation = this.buildMitigation(evidence);
-    const indicators = this.buildIndicators(evidence);
+    const confidence = Math.max(50, 100 - Math.abs(riskScore - 50) / 2);
 
     return {
       riskScore,
-      confidence: Math.round(confidence * 100) / 100,
       riskLevel,
-      recommendedAction,
-      evidence,
-      signalBreakdown,
+      confidence: Math.round(confidence),
       indicators,
       mitigation,
-      summary: `Email analysis complete. Risk score: ${riskScore}/100. Confidence: ${Math.round(confidence * 100)}%. Recommended action: ${recommendedAction}.`,
-      senderDomain: fromDomain,
-      replyToDomain,
-      fromAddress: input.from.email,
-      urls,
-      attachments: input.attachments?.map((a) => ({
-        filename: a.filename,
-        mimeType: a.mimeType,
-        risk: DANGEROUS_ATTACHMENT_REGEX.test(a.filename) ? 'high' : 'unknown',
-      })),
-      imageUrl: riskLevel === 'critical'
-        ? 'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop'
-        : 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400&h=300&fit=crop',
+      from: input.from,
+      subject: input.subject,
+      spf: input.auth?.spf || 'unknown',
+      dkim: input.auth?.dkim || 'unknown',
+      dmarc: input.auth?.dmarc || 'unknown',
+      imageUrl: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop',
     };
+  }
+
+  private checkAuthentication(auth?: any) {
+    let score = 0;
+    const indicators: Array<{ type: string; description: string; severity: string }> = [];
+
+    if (!auth) {
+      score += 20;
+      indicators.push({
+        type: 'Missing Authentication',
+        description: 'Email lacks SPF, DKIM, or DMARC records',
+        severity: 'high',
+      });
+      return { score, indicators };
+    }
+
+    if (auth.spf !== 'pass') {
+      score += 15;
+      indicators.push({
+        type: 'SPF Failure',
+        description: `SPF check failed (${auth.spf || 'none'})`,
+        severity: 'high',
+      });
+    }
+
+    if (auth.dkim !== 'pass') {
+      score += 15;
+      indicators.push({
+        type: 'DKIM Failure',
+        description: `DKIM signature invalid (${auth.dkim || 'none'})`,
+        severity: 'high',
+      });
+    }
+
+    if (auth.dmarc !== 'pass') {
+      score += 10;
+      indicators.push({
+        type: 'DMARC Failure',
+        description: `DMARC policy not aligned (${auth.dmarc || 'none'})`,
+        severity: 'medium',
+      });
+    }
+
+    return { score, indicators };
+  }
+
+  private checkDisplayNameSpoofing(from: any) {
+    let score = 0;
+    const indicators: Array<{ type: string; description: string; severity: string }> = [];
+
+    if (from.name) {
+      const displayName = from.name.toLowerCase();
+      const email = from.email.toLowerCase();
+      const domain = from.domain?.toLowerCase() || email.split('@')[1];
+
+      // Check for common brand names in display name but different domain
+      const commonBrands = ['paypal', 'amazon', 'apple', 'microsoft', 'google', 'bank', 'irs', 'fedex', 'ups'];
+      const hasBrandName = commonBrands.some((brand) => displayName.includes(brand));
+
+      if (hasBrandName && !domain.includes(commonBrands.find((b) => displayName.includes(b)) || '')) {
+        score += 25;
+        indicators.push({
+          type: 'Display Name Spoofing',
+          description: `Display name claims to be from a major brand but domain is ${domain}`,
+          severity: 'critical',
+        });
+      }
+
+      // Check for homograph attacks (similar looking characters)
+      if (/[0O][0O]|[1l!|]|[5S]|[8B]/.test(displayName)) {
+        score += 10;
+        indicators.push({
+          type: 'Homograph Attack',
+          description: 'Display name contains characters that look similar to legitimate brands',
+          severity: 'medium',
+        });
+      }
+    }
+
+    return { score, indicators };
+  }
+
+  private checkBrandImpersonation(from: any, subject?: string, bodyText?: string) {
+    let score = 0;
+    const indicators: Array<{ type: string; description: string; severity: string }> = [];
+
+    const brands = {
+      paypal: ['paypal', 'pp', 'ebay'],
+      amazon: ['amazon', 'aws'],
+      apple: ['apple', 'icloud', 'itunes'],
+      microsoft: ['microsoft', 'outlook', 'office365'],
+      google: ['google', 'gmail', 'drive'],
+      bank: ['bank', 'banking', 'account', 'verify'],
+    };
+
+    const text = `${from.email} ${subject} ${bodyText}`.toLowerCase();
+
+    for (const [brand, keywords] of Object.entries(brands)) {
+      const hasKeyword = keywords.some((kw) => text.includes(kw));
+      if (hasKeyword && !from.email.includes(brand)) {
+        score += 20;
+        indicators.push({
+          type: 'Brand Impersonation',
+          description: `Email references ${brand} but sender domain is ${from.domain || from.email.split('@')[1]}`,
+          severity: 'critical',
+        });
+        break;
+      }
+    }
+
+    return { score, indicators };
+  }
+
+  private analyzeUrls(urls: string[]) {
+    let score = 0;
+    const indicators: Array<{ type: string; description: string; severity: string }> = [];
+
+    for (const url of urls) {
+      // Check for suspicious patterns
+      if (/paypa1|amaz0n|micr0soft|go0gle|apple-id|verify-account|confirm-identity|xn--/i.test(url)) {
+        score += 20;
+        indicators.push({
+          type: 'Malicious URL',
+          description: `URL contains known phishing patterns: ${url}`,
+          severity: 'critical',
+        });
+      }
+
+      if (/^http:\/\//i.test(url)) {
+        score += 10;
+        indicators.push({
+          type: 'Unencrypted URL',
+          description: 'URL uses HTTP instead of HTTPS',
+          severity: 'high',
+        });
+      }
+
+      if (/\b(bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly)\b/i.test(url)) {
+        score += 8;
+        indicators.push({
+          type: 'URL Shortener',
+          description: 'URL uses shortening service, destination unclear',
+          severity: 'medium',
+        });
+      }
+    }
+
+    return { score, indicators };
+  }
+
+  private analyzeAttachments(attachments: any[]) {
+    let score = 0;
+    const indicators: Array<{ type: string; description: string; severity: string }> = [];
+
+    const dangerousExtensions = ['.exe', '.bat', '.cmd', '.scr', '.vbs', '.js', '.jar', '.zip', '.rar'];
+    const macroExtensions = ['.doc', '.xls', '.ppt'];
+
+    for (const attachment of attachments) {
+      const filename = attachment.filename.toLowerCase();
+
+      if (dangerousExtensions.some((ext) => filename.endsWith(ext))) {
+        score += 25;
+        indicators.push({
+          type: 'Dangerous Attachment',
+          description: `Attachment ${attachment.filename} is executable`,
+          severity: 'critical',
+        });
+      }
+
+      if (macroExtensions.some((ext) => filename.endsWith(ext))) {
+        score += 15;
+        indicators.push({
+          type: 'Macro-Enabled Document',
+          description: `Attachment ${attachment.filename} may contain macros`,
+          severity: 'high',
+        });
+      }
+
+      if (attachment.size && attachment.size > 10 * 1024 * 1024) {
+        score += 5;
+        indicators.push({
+          type: 'Large Attachment',
+          description: `Attachment ${attachment.filename} is unusually large (${(attachment.size / 1024 / 1024).toFixed(1)}MB)`,
+          severity: 'low',
+        });
+      }
+    }
+
+    return { score, indicators };
+  }
+
+  private detectSocialEngineering(subject?: string, bodyText?: string) {
+    let score = 0;
+    const indicators: Array<{ type: string; description: string; severity: string }> = [];
+
+    const text = `${subject} ${bodyText}`.toLowerCase();
+
+    const socialEngPatterns = [
+      { pattern: /verify.*account|confirm.*identity|update.*information/i, score: 15, desc: 'Account verification request' },
+      { pattern: /click.*here|act.*now|immediate.*action/i, score: 10, desc: 'Pressure to take immediate action' },
+      { pattern: /suspended|locked|disabled|compromised/i, score: 15, desc: 'Account compromise threat' },
+      { pattern: /unusual.*activity|suspicious.*login|unauthorized.*access/i, score: 12, desc: 'Security threat claim' },
+      { pattern: /claim.*reward|congratulations|won|prize/i, score: 15, desc: 'Prize/reward scam pattern' },
+    ];
+
+    for (const { pattern, score: patternScore, desc } of socialEngPatterns) {
+      if (pattern.test(text)) {
+        score += patternScore;
+        indicators.push({
+          type: 'Social Engineering',
+          description: desc,
+          severity: 'high',
+        });
+      }
+    }
+
+    return { score, indicators };
+  }
+
+  private detectUrgency(subject?: string, bodyText?: string) {
+    let score = 0;
+    const indicators: Array<{ type: string; description: string; severity: string }> = [];
+
+    const text = `${subject} ${bodyText}`.toLowerCase();
+
+    const urgencyPatterns = [
+      /urgent|immediate|asap|right now|within 24 hours|expires|deadline/i,
+      /act now|don't delay|limited time|hurry|quickly/i,
+      /confirm now|verify now|update now|click now/i,
+    ];
+
+    const urgencyCount = urgencyPatterns.filter((p) => p.test(text)).length;
+
+    if (urgencyCount > 0) {
+      score += urgencyCount * 8;
+      indicators.push({
+        type: 'Urgency Tactics',
+        description: `Email uses ${urgencyCount} urgency-inducing phrases`,
+        severity: 'medium',
+      });
+    }
+
+    return { score, indicators };
+  }
+
+  private detectCredentialHarvesting(bodyText?: string, bodyHtml?: string) {
+    let score = 0;
+    const indicators: Array<{ type: string; description: string; severity: string }> = [];
+
+    const text = `${bodyText} ${bodyHtml}`.toLowerCase();
+
+    const credentialPatterns = [
+      { pattern: /password|passphrase|pin|secret/i, score: 15, desc: 'Password request' },
+      { pattern: /username|login|account number|user id/i, score: 15, desc: 'Username/account request' },
+      { pattern: /credit card|card number|cvv|expiration/i, score: 20, desc: 'Credit card request' },
+      { pattern: /social security|ssn|tax id/i, score: 20, desc: 'SSN/tax ID request' },
+      { pattern: /banking|account details|routing number/i, score: 20, desc: 'Banking information request' },
+    ];
+
+    for (const { pattern, score: patternScore, desc } of credentialPatterns) {
+      if (pattern.test(text)) {
+        score += patternScore;
+        indicators.push({
+          type: 'Credential Harvesting',
+          description: desc,
+          severity: 'critical',
+        });
+      }
+    }
+
+    return { score, indicators };
   }
 }

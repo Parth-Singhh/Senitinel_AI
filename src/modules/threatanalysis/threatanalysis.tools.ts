@@ -1,6 +1,6 @@
 import { ToolDecorator as Tool, z, ExecutionContext, Injectable, Widget } from '@nitrostack/core';
-import { EmailAnalysisService } from './email-analysis.service';
-import type { EmailAnalysisInput } from './email-types';
+import { EmailAnalysisService } from './email-analysis.service.js';
+import type { EmailAnalysisInput } from './email-types.js';
 
 /**
  * ThreatAnalysis Tools
@@ -8,7 +8,7 @@ import type { EmailAnalysisInput } from './email-types';
  * Email, URL, and CVE analysis tools for security threat detection
  */
 
-@Injectable()
+@Injectable({ deps: [EmailAnalysisService] })
 export class ThreatAnalysisTools {
   constructor(private readonly emailAnalysisService: EmailAnalysisService) {}
 
@@ -62,60 +62,74 @@ export class ThreatAnalysisTools {
     let riskScore = 0;
     const indicators: string[] = [];
 
+    // 1. Domain Impersonation & Punycode
     if (/paypa1|amaz0n|micr0soft|go0gle|apple-id|verify-account|confirm-identity|xn--/i.test(url)) {
       status = 'malicious';
       riskScore = 95;
-      indicators.push('Domain impersonation or punycode detected');
-      indicators.push('Known phishing infrastructure');
+      indicators.push('🚨 Domain impersonation or punycode detected');
+      indicators.push('🚨 Known phishing infrastructure');
     }
 
+    // 2. HTTPS Analysis
     if (/^http:\/\//i.test(url)) {
       if (status === 'safe') status = 'suspicious';
       riskScore += 10;
-      indicators.push('No HTTPS encryption');
+      indicators.push('⚠️ No HTTPS encryption');
     }
 
+    // 3. IP-based URLs
     if (/^https?:\/\/\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/|$)/i.test(url)) {
       if (status === 'safe') status = 'suspicious';
       riskScore += 20;
-      indicators.push('URL uses IP address instead of domain');
+      indicators.push('⚠️ URL uses IP address instead of domain');
     }
 
-    if (/\b(bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly)\b/i.test(url)) {
+    // 4. URL Shortener Detection
+    if (/\b(bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly|ow\.ly|short\.link)\b/i.test(url)) {
       if (status === 'safe') status = 'suspicious';
       riskScore += 15;
-      indicators.push('URL shortener detected');
+      indicators.push('⚠️ URL shortener detected - destination unclear');
     }
 
-    if (/\.(xyz|top|tk|ml|ga|cf|click|download|review|work|loan|vip|shop)(\/|$)/i.test(url)) {
+    // 5. Suspicious TLD Detection
+    if (/\.(xyz|top|tk|ml|ga|cf|click|download|review|work|loan|vip|shop|win|date|stream|racing|cricket|accountant|faith|science|trade)(\/|$)/i.test(url)) {
       if (status === 'safe') status = 'suspicious';
       riskScore += 15;
-      indicators.push('Suspicious top-level domain');
+      indicators.push('⚠️ Suspicious top-level domain');
     }
 
-    if (/\b(login|verify|confirm|update|secure|account|signin|password|unlock|reset)\b/i.test(url)) {
+    // 6. Credential-related Keywords
+    if (/\b(login|verify|confirm|update|secure|account|signin|password|unlock|reset|authenticate|authorize)\b/i.test(url)) {
       riskScore += 10;
-      indicators.push('Credential-related path keywords');
+      indicators.push('⚠️ Credential-related path keywords detected');
     }
 
-    if ((url.match(/\./g) || []).length >= 4) {
+    // 7. Deep Subdomain Detection
+    const subdomainCount = (url.match(/\./g) || []).length;
+    if (subdomainCount >= 4) {
       riskScore += 8;
-      indicators.push('Deep subdomain chain detected');
+      indicators.push(`⚠️ Deep subdomain chain detected (${subdomainCount} levels)`);
     }
+
+    // 8. Reputation Score (simulated)
+    const reputationScore = Math.max(0, 100 - riskScore);
 
     const threatExplanation =
       status === 'malicious'
-        ? 'This URL is known to be malicious or highly suspicious. Do not visit.'
+        ? '🚨 This URL is known to be malicious or highly suspicious. Do NOT visit.'
         : status === 'suspicious'
-          ? 'This URL has suspicious characteristics. Exercise caution.'
-          : 'This URL appears safe based on current checks.';
+          ? '⚠️ This URL has suspicious characteristics. Exercise extreme caution.'
+          : '✓ This URL appears safe based on current checks.';
 
     return {
       url,
       status,
       threatExplanation,
-      indicators: indicators.length > 0 ? indicators : ['No threats detected'],
+      indicators: indicators.length > 0 ? indicators : ['✓ No threats detected'],
       riskScore: Math.min(riskScore, 100),
+      reputationScore,
+      subdomainDepth: subdomainCount,
+      hasHttps: /^https:\/\//i.test(url),
       imageUrl: status === 'safe'
         ? 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=400&h=300&fit=crop'
         : 'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400&h=300&fit=crop',
@@ -141,12 +155,14 @@ export class ThreatAnalysisTools {
         severity: 'critical',
         affectedSoftware: ['Framework v1.0-v2.5', 'Framework v3.0-v3.2'],
         mitigation: [
-          'Update to Framework v2.6 or v3.3 or later',
-          'Apply security patch immediately',
-          'Monitor systems for exploitation attempts',
-          'Implement network segmentation',
+          '🔴 Update to Framework v2.6 or v3.3 or later immediately',
+          '🔴 Apply security patch immediately',
+          '🟠 Monitor systems for exploitation attempts',
+          '🟠 Implement network segmentation',
+          '🟡 Review access logs for suspicious activity',
         ],
         publishedDate: '2024-01-15',
+        mitreTactics: ['Execution', 'Privilege Escalation'],
       },
       'CVE-2024-5678': {
         cveId: 'CVE-2024-5678',
@@ -155,12 +171,14 @@ export class ThreatAnalysisTools {
         severity: 'high',
         affectedSoftware: ['Database Connector v1.0-v1.5'],
         mitigation: [
-          'Update to Database Connector v1.6 or later',
-          'Use parameterized queries',
-          'Implement input validation',
-          'Apply principle of least privilege to database accounts',
+          '🟠 Update to Database Connector v1.6 or later',
+          '🟠 Use parameterized queries in all applications',
+          '🟡 Implement input validation and sanitization',
+          '🟡 Apply principle of least privilege to database accounts',
+          '🟢 Enable SQL query logging and monitoring',
         ],
         publishedDate: '2024-02-20',
+        mitreTactics: ['Persistence', 'Exfiltration'],
       },
     };
 
@@ -171,12 +189,13 @@ export class ThreatAnalysisTools {
       severity: 'high',
       affectedSoftware: ['Multiple versions'],
       mitigation: [
-        'Check official vendor security advisories',
-        'Apply available patches',
-        'Monitor for exploitation',
-        'Implement compensating controls',
+        '🟠 Check official vendor security advisories',
+        '🟠 Apply available patches',
+        '🟡 Monitor for exploitation',
+        '🟡 Implement compensating controls',
       ],
       publishedDate: new Date().toISOString().split('T')[0],
+      mitreTactics: [],
     };
 
     return {
