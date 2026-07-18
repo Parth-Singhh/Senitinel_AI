@@ -2,3 +2,4 @@
 node_modules/
 src/widgets/node_modules/
 .nitrostudio/
+**/.next
