@@ -123,6 +123,17 @@ export default function ThreatDashboard() {
   const isUrlScan = !!data.url;
   const isCveAnalysis = !!data.cveId;
 
+  const tools = [
+    { title: 'Email Analysis', desc: 'Analyze phishing emails', icon: '📧', color: '#00d9ff' },
+    { title: 'URL Scan', desc: 'Check suspicious links', icon: '🔗', color: '#ff6d00' },
+    { title: 'IOC Analyzer', desc: 'Analyze IPs, domains, hashes', icon: '🧪', color: '#ffd600' },
+    { title: 'Password Analyzer', desc: 'Assess password strength', icon: '🔐', color: '#00e676' },
+    { title: 'Email Header Analyzer', desc: 'Inspect SPF, DKIM, DMARC', icon: '✉️', color: '#00d9ff' },
+    { title: 'Domain Intelligence', desc: 'WHOIS, DNS, SSL checks', icon: '🌐', color: '#ff6d00' },
+    { title: 'File Risk Analyzer', desc: 'Evaluate file risk', icon: '📁', color: '#ffd600' },
+    { title: 'Incident Advisor', desc: 'Get response guidance', icon: '🛡️', color: '#00e676' },
+  ];
+
   return (
     <div style={{
       background: '#0a0e27',
@@ -167,6 +178,30 @@ export default function ThreatDashboard() {
           <ActionButton icon="📋" label="Copy" onClick={() => handleCopy(JSON.stringify(data))} variant="secondary" size="sm" />
           <ActionButton icon="💾" label="Export" onClick={handleExport} variant="secondary" size="sm" />
         </div>
+      </div>
+
+      {/* Tool Showcase */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: '16px',
+        marginBottom: '24px',
+      }}>
+        {tools.map((tool) => (
+          <div
+            key={tool.title}
+            style={{
+              background: 'rgba(26, 40, 71, 0.4)',
+              border: `1px solid ${tool.color}`,
+              borderRadius: '12px',
+              padding: '16px',
+            }}
+          >
+            <div style={{ fontSize: '24px', marginBottom: '8px' }}>{tool.icon}</div>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#f0f4f8' }}>{tool.title}</div>
+            <div style={{ fontSize: '12px', color: '#a8b5c8', marginTop: '4px' }}>{tool.desc}</div>
+          </div>
+        ))}
       </div>
 
       {/* Main content grid */}
