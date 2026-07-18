@@ -84,13 +84,16 @@ export default function ThreatDashboard() {
     return '#22c55e';
   };
 
-  const getSeverityType = (level?: string | number): 'critical' | 'high' | 'medium' | 'low' | 'info' | 'safe' => {
+  const getSeverityType = (
+    level?: string | number
+  ): 'critical' | 'high' | 'medium' | 'low' | 'info' => {
     if (typeof level === 'number') {
       if (level >= 80) return 'critical';
       if (level >= 60) return 'high';
       if (level >= 40) return 'medium';
       return 'low';
     }
+
     const levelStr = String(level).toLowerCase();
     if (levelStr === 'critical') return 'critical';
     if (levelStr === 'high') return 'high';
@@ -115,7 +118,6 @@ export default function ThreatDashboard() {
     a.click();
   };
 
-  // Detect report vs single analysis
   const isReport = !!data.reportId;
   const isEmailAnalysis = !!data.riskScore && !data.url && !data.cveId;
   const isUrlScan = !!data.url;
@@ -129,7 +131,7 @@ export default function ThreatDashboard() {
       minHeight: '100vh',
       padding: '24px',
     }}>
-      {/* Header with actions */}
+      {/* Header with branding and actions */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -137,14 +139,29 @@ export default function ThreatDashboard() {
         marginBottom: '24px',
         paddingBottom: '16px',
         borderBottom: '1px solid rgba(42, 58, 90, 0.4)',
+        gap: '16px',
+        flexWrap: 'wrap',
       }}>
-        <div>
-          <h1 style={{ margin: '0 0 4px 0', fontSize: '24px', fontWeight: 'bold' }}>
-            {isReport ? '🚨 Security Incident Report' : isEmailAnalysis ? '📧 Email Analysis' : isUrlScan ? '🔗 URL Scan' : '🔓 CVE Analysis'}
-          </h1>
-          <p style={{ margin: 0, fontSize: '12px', color: '#a8b5c8' }}>
-            {new Date(data.timestamp || Date.now()).toLocaleString()}
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <img
+            src="/logo.png"
+            alt="Sentinel AI"
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '10px',
+              objectFit: 'cover',
+              flexShrink: 0,
+            }}
+          />
+          <div>
+            <h1 style={{ margin: '0 0 4px 0', fontSize: '24px', fontWeight: 'bold' }}>
+              Sentinel AI
+            </h1>
+            <p style={{ margin: 0, fontSize: '12px', color: '#a8b5c8' }}>
+              {isReport ? 'Security Incident Report' : isEmailAnalysis ? 'Email Analysis' : isUrlScan ? 'URL Scan' : 'CVE Analysis'}
+            </p>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <ActionButton icon="📋" label="Copy" onClick={() => handleCopy(JSON.stringify(data))} variant="secondary" size="sm" />
@@ -257,7 +274,6 @@ export default function ThreatDashboard() {
               </div>
             </div>
           )}
-          {/* Auth badges */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {data.spf && <SeverityBadge severity={data.spf === 'pass' ? 'low' : 'high'} size="sm" showIcon={false} />}
             {data.dkim && <SeverityBadge severity={data.dkim === 'pass' ? 'low' : 'high'} size="sm" showIcon={false} />}
